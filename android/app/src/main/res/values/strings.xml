@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Dining Car</string>
+    <string name="title_activity_main">Dining Car</string>
+    <string name="package_name">com.diningcar.app</string>
+    <string name="custom_url_scheme">com.diningcar.app</string>
+</resources>
