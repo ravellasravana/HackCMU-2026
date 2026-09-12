@@ -88,7 +88,9 @@ export function DiningCar() {
 
   const [today, setToday] = useState(() => todayISO());
   const [receiptOpen, setReceiptOpen] = useState(false);
-  const [welcomeOpen, setWelcomeOpen] = useState(() => state.items.length === 0);
+  // Always shown on open, regardless of what's already in the fridge — the
+  // dashboard sits as the backdrop behind it either way (see hasItems below).
+  const [welcomeOpen, setWelcomeOpen] = useState(true);
   const [confirming, setConfirming] = useState<InventoryItem | null>(null);
   const [k2Busy, setK2Busy] = useState(false);
   const [notice, setNotice] = useState<{ text: string; kind: "info" | "warn" } | null>(null);
@@ -400,9 +402,13 @@ export function DiningCar() {
 
       {/* ---- Dialogs ---- */}
       <WelcomeDialog
-        open={welcomeOpen && !hasItems}
+        open={welcomeOpen}
         onOpenChange={setWelcomeOpen}
-        onAdd={handleAdd}
+        onAdd={(text) => {
+          const err = handleAdd(text);
+          if (!err) setWelcomeOpen(false);
+          return err;
+        }}
         onOpenReceipt={() => {
           setWelcomeOpen(false);
           setReceiptOpen(true);
