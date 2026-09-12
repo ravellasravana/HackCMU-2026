@@ -1,79 +1,81 @@
-# Dining Car
+# 🚂 Dining Car
 
-> Forward your grocery receipt. We put *eat-by* alarms on your calendar and tell you what to cook tonight so nothing rots.
+> **"Forward your grocery receipt. We put eat-by alarms on your calendar and tell you what to cook tonight so nothing rots."**
 
-Dining Car reads the order email that Instacart, Amazon Fresh, Walmart or DoorDash already sent you, maps every line to a USDA FoodKeeper shelf life, and then solves a small optimisation problem: **which dinner on which night so the most money's worth of food gets eaten before it expires.** The result is a fridge timeline, a "Tonight: …" card, a calendar full of eat-by alarms, and a one-line headline judges understand instantly:
+---
 
-> Without a plan: **$35.59** of this receipt goes in the bin. With Dining Car: **$0.00**.
+**HackCMU 2026 · Food Track · IFM Prize submission**
 
-This repo contains two things:
+Built with **IFM K2-Horizon-375B-A23B** · USDA FoodKeeper shelf-life data · exact dynamic-programming scheduler
 
-1. **The web app** (`src/`) — the fridge-timeline UI, the receipt normalizer, the scheduler, and API routes that call Kimi K2 when a key is present (and fall back to fully local logic when it isn't).
-2. **The n8n workflow** (`n8n/`) — Gmail trigger → K2 extraction → shelf-life lookup → K2 dinners → dollar-optimising scheduler → Google Calendar alarms + summary email. Same algorithms, shipped as Code nodes.
+---
 
-## Run it locally
+## The problem
+
+US households throw out **~$1,800 in groceries every year** — not because they're careless, but because they forget what's in the fridge. Every food app asks you to type in what you bought or photograph your fridge. **Nobody was reading the receipt already in your inbox.**
+
+## What it does
+
+1. **Forward the receipt** (Instacart / Walmart / Amazon Fresh / DoorDash / any retailer)  
+2. **IFM K2** extracts every item with a confidence score, maps each one to a canonical food using the USDA FoodKeeper database, and flags anything uncertain for a one-tap confirm  
+3. **USDA FoodKeeper** assigns pantry / fridge / freezer shelf lives to every item; toggle where it lives and the deadline changes live  
+4. **A value-maximising scheduler** (exact DP over nights × set of rescued items) picks one dinner per night for 7 nights that keeps the **most dollars of food from expiring** — not just "earliest-expiry first", which leaves money on the table  
+5. **The app** shows a fridge timeline (green → amber → red), tonight's dinner card with a grounding score ("Uses 8 of 8 ingredients you own"), freeze-or-eat decisions, and a before/after headline: *Without a plan: $35.59 goes in the bin. With Dining Car: $0.00.*
+
+## Demo in 3 minutes
+
+| When | What happens |
+|------|-------------|
+| 0:00 | "Who has thrown out spinach they forgot about?" → forward the Instacart receipt → nodes light up |
+| 0:40 | Fridge timeline appears: 🥬 Spinach 4 days · 🍓 Strawberries 2 days · 🐔 Chicken 1 day |
+| 1:00 | Tonight: **Spinach-strawberry salad with grilled chicken** · rescues $16.87 · Uses 8/8 ingredients |
+| 1:30 | Calendar: eat-by alarms and nightly dinner events already filled in |
+| 2:00 | Hand judge the keyboard: type "avocados" → timeline updates instantly |
+| 2:30 | "Freeze the ground beef by Sunday and it's good until January." |
+
+## What's technically interesting
+
+| Layer | Detail |
+|-------|--------|
+| **Receipt parsing** | Token-by-token abbreviation expansion (`ORG BBY SPNCH 5OZ` → `Organic baby spinach`) + bigram similarity match against FoodKeeper aliases. Confidence score 0–1; below 0.7 → amber "confirm?" chip. |
+| **Shelf-life engine** | ~75 USDA FoodKeeper entries with pantry / fridge / freezer days + opened-package rules. Storage toggle changes the clock in real time. |
+| **Dollar-optimising DP** | One dinner per night, never use an item past eat-by, maximise total dollars eaten. O(2^N × nights) where N ≤ 16 tracked items; runs in ~2 ms. Also computes "no plan" and "earliest-first" baselines for the headline comparison. |
+| **Freeze-or-eat decisions** | Anything the plan can't fit checks FoodKeeper for a freezer life: "Freeze by Sunday → good until January." Items with no freezer life become eat-now alerts. |
+| **Grounded recipe checker** | Every recipe (library or K2-generated) is scored: owned ÷ total (staples count as owned). Below 80% or a missing key ingredient → rejected. Score shown on card: *"Uses 8 of 8 ingredients you own."* K2 regenerates once with the rejection reasons included in the prompt. |
+| **IFM K2-Horizon-375B** | Two calls: (1) receipt → structured items with canonical food IDs + confidence; (2) three dinners constrained to what you actually own. Fully grounded by the checker — the model can't hallucinate a dinner needing saffron. |
+
+## Run locally
 
 ```bash
+git clone https://github.com/ravellasravana/HackCMU-2026.git
+cd HackCMU-2026
 npm install
+cp .env.example .env.local   # fill in your IFM key
 npm run dev
 # → http://localhost:4187
 ```
 
-Click **Use Thursday's Instacart receipt** for the demo flow, or **Forward a receipt** and paste any order email. Everything works offline; state lives in `localStorage`.
+**Everything works offline** (local receipt normalizer + built-in recipe library). The IFM K2 calls kick in when `K2_API_KEY` is set.
 
-### Optional: Kimi K2
-
-Without a key, receipts are parsed by a deterministic normalizer (abbreviation expansion + fuzzy match against FoodKeeper aliases) and dinners come from a built-in 26-recipe library. With a key, K2 handles both, and every K2 dinner is still verified against your inventory before it's allowed on the plan.
-
-```bash
+```env
 # .env.local
-K2_API_KEY=sk-...
-K2_BASE_URL=https://api.moonshot.ai/v1          # or https://openrouter.ai/api/v1
-K2_MODEL=kimi-k2-0905-preview                    # or moonshotai/kimi-k2-0905 on OpenRouter
+K2_API_KEY=IFM-v1_...
+K2_BASE_URL=https://api.ifm.ai/v1
+K2_MODEL=IFM/K2-Horizon-375B-A23B
 ```
 
-## What's underneath
+## Tech stack
 
-| Piece | Where | What it does |
-| --- | --- | --- |
-| Receipt normalization with confidence | `src/lib/normalize.ts` | `ORG BBY SPNCH 5OZ` → *baby spinach*, 1.00. Whole-phrase alias hits score by how much of the line they explain; otherwise bigram similarity. Anything under 0.7 gets an amber **Confirm?** tap. |
-| Shelf-life data | `src/lib/foodkeeper.ts` | ~75 foods from USDA FoodKeeper with pantry / fridge / freezer days and opened-package rules, plus per-category fallbacks. Toggle where an item lives and the clock changes. |
-| Dollar-optimising scheduler | `src/lib/scheduler.ts` | Exact dynamic program over (night, set-of-rescued-items). One dinner per night, never use an item after its eat-by, maximise dollars eaten before expiry. Runs in ~2 ms. Also computes the "no plan" and "earliest-expiry-first" baselines for the before/after headline. |
-| Freeze-or-eat decisions | `src/lib/scheduler.ts` | Anything the plan can't fit before it dies becomes *"Freeze the ground beef by Sunday and it's good until January."* Items that don't freeze become an honest "eat it as a snack or it's $X in the bin." |
-| Grounded recipes with a checker | `src/lib/scheduler.ts` → `groundRecipe` | Every dinner (library or K2) is scored: owned ingredients ÷ total, staples count as owned. Under 80 % or missing a key ingredient → rejected. The card shows *"Uses 6 of 7 ingredients you own."* |
-| Calendar export | `src/lib/ics.ts` | One all-day eat-by alarm per perishable, one "Tonight: …" event per night, one "Freeze the …" reminder per decision. |
-| K2 prompts | `src/lib/prompts.ts`, `n8n/prompts/` | Prompt 1: receipt → items with canonical FoodKeeper id + confidence. Prompt 2: three dinners constrained to inventory. |
+- **Next.js 16** (App Router, TypeScript) · **Tailwind CSS 4** · **shadcn/ui**  
+- **IFM K2-Horizon-375B-A23B** via `api.ifm.ai`  
+- **USDA FoodKeeper** shelf-life data (abridged, embedded)  
+- **localStorage** only — zero backend, zero database, fully static-deployable  
+- Exact dynamic-programming scheduler (vanilla TypeScript, ~120 lines)
 
-## The n8n workflow
+## Tracks
 
-Import `n8n/dining-car-workflow.json`, then attach credentials to the Gmail, Google Calendar and "K2 API key" (HTTP header auth, `Authorization: Bearer …`) nodes. Set `K2_BASE_URL` / `K2_MODEL` as n8n environment variables if you're not on Moonshot's default endpoint.
+**Food** (primary) · **IFM Prize** (K2 model used for both receipt extraction and recipe generation)
 
-```
-Gmail Trigger  subject:(receipt OR "your order" OR Instacart OR "Amazon Fresh" OR Walmart OR DoorDash)
-  → Prepare receipt text          (Code)  strip HTML
-  → Build K2 extraction request   (Code)  prompt 1
-  → K2: extract items             (HTTP)
-  → Parse K2 JSON                 (Code)
-  → Shelf life & eat-by dates     (Code)  FoodKeeper table, eat-by per item
-  → Build K2 dinners request      (Code)  prompt 2
-  → K2: three dinners             (HTTP)
-  → Parse K2 dinners              (Code)
-  → Dollar-optimising scheduler   (Code)  grounding check + DP + freeze decisions + email/calendar rows
-      → One row per calendar event → Google Calendar   (eat-by alarms, dinners, freeze reminders)
-      → Gmail: weekly summary                          ("11 items expire this week — tonight: …")
-```
+---
 
-The Code node sources are in `n8n/code/` so they can be read and diffed; `n8n/mock-instacart-receipt.eml` is the email to forward during the demo.
-
-## Demo script (3 minutes)
-
-1. "Who here has thrown out vegetables they forgot about?" Forward the Instacart receipt; nodes light up.
-2. Open the calendar: 🐔 Chicken eat by Sun, 🍓 Strawberries eat by Mon, 🥬 Spinach eat by Wed. "I typed nothing."
-3. Open the app: fridge timeline, green → amber → red. **Tonight: spinach-strawberry salad with grilled chicken** — the three things dying first, $16.87 rescued.
-4. Hand over the mouse: "Add something you bought this week." Type *avocados*. Timeline updates, the plan reshuffles.
-5. Point at the decision: "Freeze the ground beef by Sunday and it's good until January."
-6. One line on what's underneath: K2 reads the receipt, USDA shelf-life data sets the clocks, an exact DP orders meals by what dies first, and every dinner is verified against what you actually own.
-
-## Roadmap (don't build)
-
-A weekly "what did you actually throw out?" tap that learns your waste pattern and edits your next shopping list, and a shared household mode where roommates' receipts merge.
+*Built at HackCMU 2026 by the Dining Car team.*

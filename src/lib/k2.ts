@@ -11,8 +11,8 @@ export function k2Configured(): boolean {
 export async function k2Json<T>(prompt: string, { maxTokens = 2500 }: { maxTokens?: number } = {}): Promise<T> {
   const apiKey = process.env.K2_API_KEY;
   if (!apiKey) throw new Error("K2_API_KEY is not set");
-  const baseUrl = (process.env.K2_BASE_URL ?? "https://api.moonshot.ai/v1").replace(/\/$/, "");
-  const model = process.env.K2_MODEL ?? "kimi-k2-0905-preview";
+  const baseUrl = (process.env.K2_BASE_URL ?? "https://api.ifm.ai/v1").replace(/\/$/, "");
+  const model = process.env.K2_MODEL ?? "IFM/K2-Horizon-375B-A23B";
 
   const res = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",

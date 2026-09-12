@@ -1,7 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarPlus, Mail, RotateCcw, Sparkles, Loader2, TrainFront } from "lucide-react";
+import {
+  CalendarPlus, Mail, RotateCcw, Sparkles, Loader2, TrainFront,
+  TrendingDown, Zap, ChevronRight,
+} from "lucide-react";
 import { addDays, todayISO } from "@/lib/dates";
 import { RECEIPT_PRESETS } from "@/lib/demo";
 import { buildCalendar } from "@/lib/ics";
@@ -20,6 +23,99 @@ import { Headline } from "@/components/headline";
 import { PlanPanel } from "@/components/plan-panel";
 import { ReceiptDialog, type ExtractResult } from "@/components/receipt-dialog";
 
+/* ---- tiny floating food particles for the empty state hero ---- */
+const PARTICLES = ["🥬", "🍓", "🐔", "🥛", "🐟", "🥑", "🍌", "🥩"];
+
+function FoodParticle({ emoji, style }: { emoji: string; style: React.CSSProperties }) {
+  return (
+    <div className="pointer-events-none absolute select-none text-2xl opacity-20 animate-star" style={style}>
+      {emoji}
+    </div>
+  );
+}
+
+function EmptyHero({ onDemo, onOpen }: { onDemo: () => void; onOpen: () => void }) {
+  return (
+    <section className="relative flex flex-1 flex-col items-center justify-center overflow-hidden px-4 py-16 text-center">
+      {/* Background particles */}
+      {PARTICLES.map((emoji, i) => (
+        <FoodParticle
+          key={i}
+          emoji={emoji}
+          style={{
+            top: `${15 + i * 9}%`,
+            left: `${8 + ((i * 37) % 84)}%`,
+            animationDelay: `${i * 0.4}s`,
+            animationDuration: `${3 + (i % 3)}s`,
+          }}
+        />
+      ))}
+
+      {/* Card */}
+      <div className="relative z-10 w-full max-w-xl space-y-6 animate-float-in">
+        {/* Emoji stack */}
+        <div className="flex justify-center gap-1 text-5xl">
+          {["🧾", "→", "📅", "→", "🍽️"].map((c, i) => (
+            <span key={i} className={`animate-slide-up delay-${i * 100}`} style={{ animationDelay: `${i * 100}ms` }}>
+              {c}
+            </span>
+          ))}
+        </div>
+
+        <div className="space-y-3">
+          <h2 className="text-4xl font-black leading-tight tracking-tight md:text-5xl">
+            Stop throwing{" "}
+            <span className="text-rose-400">money</span>{" "}
+            in the bin.
+          </h2>
+          <p className="mx-auto max-w-md text-base text-muted-foreground md:text-lg">
+            Forward your grocery receipt. We read it with IFM K2, set eat-by alarms on every item, and build a dinner plan that keeps as much money in your belly as possible.
+          </p>
+        </div>
+
+        {/* Stats row */}
+        <div className="flex flex-wrap justify-center gap-4 py-2">
+          {[
+            { icon: TrendingDown, label: "Average annual food waste per US household", value: "$1,800" },
+            { icon: Zap, label: "Optimised with IFM K2-Horizon-375B", value: "AI-powered" },
+          ].map(({ icon: Icon, label, value }) => (
+            <div key={label} className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5">
+              <Icon className="size-4 text-primary" />
+              <div className="text-left">
+                <div className="text-sm font-bold text-foreground">{value}</div>
+                <div className="max-w-[14rem] text-[11px] leading-tight text-muted-foreground">{label}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* CTAs */}
+        <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+          <Button
+            size="lg"
+            className="animate-glow-pulse gap-2 text-base font-semibold"
+            onClick={onDemo}
+          >
+            <span>🛒</span> Load Thursday&apos;s Instacart receipt
+            <ChevronRight className="size-4" />
+          </Button>
+          <Button size="lg" variant="outline" onClick={onOpen}>
+            <Mail className="size-4" /> Paste my own receipt
+          </Button>
+        </div>
+
+        <p className="text-xs text-muted-foreground">
+          No account, no database, no tracking — everything stays in your browser.
+          <br />
+          Powered by <span className="font-medium text-foreground">IFM K2-Horizon-375B</span> · USDA FoodKeeper shelf lives
+        </p>
+      </div>
+    </section>
+  );
+}
+
+/* ---------------------------------------------------------------- */
+
 export function DiningCar() {
   const [state, setStateRaw] = useState<Persisted>(loadPersisted);
   const setState = useCallback((updater: Persisted | ((prev: Persisted) => Persisted)) => {
@@ -34,10 +130,9 @@ export function DiningCar() {
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [confirming, setConfirming] = useState<InventoryItem | null>(null);
   const [k2Busy, setK2Busy] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ text: string; kind: "info" | "warn" } | null>(null);
 
   useEffect(() => {
-    // Midnight rollover: the clocks tick over without a reload.
     const tick = window.setInterval(() => setToday(todayISO()), 60_000);
     return () => window.clearInterval(tick);
   }, []);
@@ -66,10 +161,11 @@ export function DiningCar() {
       lastSource: result.source,
     }));
     const flagged = items.filter((i) => !i.confirmed).length;
-    setNotice(
-      `${items.length} items read${result.source === "k2" ? " by K2" : ""}${flagged ? `, ${flagged} need a confirm tap` : ""}.` +
-        (result.warning ? ` ${result.warning}` : ""),
-    );
+    const msg =
+      `${items.length} items loaded${result.source === "k2" ? " by IFM K2" : " (local normalizer)"}` +
+      (flagged ? ` · ${flagged} low-confidence ${flagged === 1 ? "line" : "lines"} — tap the amber chip to confirm` : ".") +
+      (result.warning ? ` ⚠️ ${result.warning}` : "");
+    setNotice({ text: msg, kind: flagged > 0 ? "warn" : "info" });
   }
 
   function loadDemo() {
@@ -81,7 +177,7 @@ export function DiningCar() {
 
   function handleAdd(text: string): string | null {
     const item = manualItem(text);
-    if (!item) return "Couldn't read that — try something like “avocados” or “1 lb shrimp $8.99”.";
+    if (!item) return "Couldn't read that — try something like \"avocados\" or \"1 lb shrimp $8.99\".";
     setState((s) => ({ ...s, items: [...s.items, item] }));
     return null;
   }
@@ -106,17 +202,28 @@ export function DiningCar() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ items: state.items, today }),
       });
-      const data = (await res.json()) as { recipes?: Recipe[]; rejected?: { title: string; reason: string }[]; source: string; note?: string; error?: string };
+      const data = (await res.json()) as {
+        recipes?: Recipe[];
+        rejected?: { title: string; reason: string }[];
+        source: string;
+        note?: string;
+        error?: string;
+      };
       if (!res.ok) throw new Error(data.error ?? "K2 request failed");
       if (data.recipes?.length) {
         setState((s) => ({ ...s, k2Recipes: data.recipes! }));
-        const rejectedNote = data.rejected?.length ? ` Rejected ${data.rejected.length} ungrounded: ${data.rejected.map((r) => `${r.title} (${r.reason})`).join("; ")}.` : "";
-        setNotice(`K2 proposed ${data.recipes.length} dinners that passed the grounding check.${rejectedNote}`);
+        const rejectedNote = data.rejected?.length
+          ? ` Rejected ${data.rejected.length} ungrounded: ${data.rejected.map((r) => `${r.title} (${r.reason})`).join("; ")}.`
+          : "";
+        setNotice({
+          text: `IFM K2 proposed ${data.recipes.length} dinners that passed the grounding check.${rejectedNote}`,
+          kind: "info",
+        });
       } else {
-        setNotice(data.note ?? "K2 returned nothing usable; the built-in library is still in play.");
+        setNotice({ text: data.note ?? "K2 returned nothing usable — using the built-in recipe library.", kind: "warn" });
       }
     } catch (err) {
-      setNotice((err as Error).message);
+      setNotice({ text: (err as Error).message, kind: "warn" });
     } finally {
       setK2Busy(false);
     }
@@ -127,101 +234,108 @@ export function DiningCar() {
     setNotice(null);
   }
 
+  const hasItems = state.items.length > 0;
+
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-6 md:px-8 md:py-10">
-      <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2 text-primary">
-            <TrainFront className="size-5" />
-            <span className="text-xs font-semibold uppercase tracking-[0.25em]">Dining Car</span>
+    <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col">
+      {/* ---- Top bar ---- */}
+      <header className="sticky top-0 z-30 border-b border-white/8 bg-background/80 backdrop-blur-md">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 md:px-8">
+          <div className="flex items-center gap-2.5">
+            <div className="flex size-8 items-center justify-center rounded-lg bg-primary/15">
+              <TrainFront className="size-4 text-primary" />
+            </div>
+            <div>
+              <div className="text-sm font-bold leading-none tracking-tight">Dining Car</div>
+              <div className="text-[10px] text-muted-foreground">IFM K2 · USDA FoodKeeper · HackCMU 2026</div>
+            </div>
           </div>
-          <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Nothing in your fridge rots on your watch.</h1>
-          <p className="max-w-2xl text-sm text-muted-foreground md:text-base">
-            Forward your grocery receipt. We put eat-by alarms on your calendar and tell you what to cook tonight — ordered by how much money dies first.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={() => setReceiptOpen(true)}>
-            <Mail /> Forward a receipt
-          </Button>
-          <Button variant="outline" onClick={downloadCalendar} disabled={!perishableCount} title="One eat-by alarm per perishable plus each night's dinner">
-            <CalendarPlus /> Calendar (.ics)
-          </Button>
-          <Button variant="outline" onClick={askK2} disabled={!perishableCount || k2Busy} title="Ask Kimi K2 for three dinners, verified against your inventory">
-            {k2Busy ? <Loader2 className="animate-spin" /> : <Sparkles />} K2 dinners
-          </Button>
-          {state.items.length > 0 && (
-            <Button variant="ghost" onClick={reset} aria-label="Clear everything">
-              <RotateCcw /> Reset
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Button size="sm" onClick={() => setReceiptOpen(true)}>
+              <Mail /> Paste receipt
             </Button>
-          )}
+            {hasItems && (
+              <>
+                <Button size="sm" variant="outline" onClick={downloadCalendar} title="Download eat-by alarms + dinner events">
+                  <CalendarPlus /> Calendar
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={askK2}
+                  disabled={k2Busy}
+                  title="Ask IFM K2 for personalized dinners — verified against your inventory"
+                >
+                  {k2Busy ? <Loader2 className="animate-spin" /> : <Sparkles />}
+                  {k2Busy ? "Thinking…" : "K2 dinners"}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={reset} aria-label="Clear everything">
+                  <RotateCcw />
+                </Button>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
+      {/* ---- Notice bar ---- */}
       {notice && (
-        <div className="flex items-start justify-between gap-3 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-sm">
-          <span>{notice}</span>
-          <button type="button" onClick={() => setNotice(null)} className="text-muted-foreground hover:text-foreground" aria-label="Dismiss">
-            ×
-          </button>
+        <div
+          className={`border-b px-4 py-2 text-xs md:px-8 ${
+            notice.kind === "warn"
+              ? "border-amber-400/20 bg-amber-400/10 text-amber-200"
+              : "border-emerald-400/20 bg-emerald-400/10 text-emerald-200"
+          }`}
+        >
+          <div className="mx-auto flex max-w-7xl items-start justify-between gap-3">
+            <span>{notice.text}</span>
+            <button type="button" onClick={() => setNotice(null)} className="shrink-0 text-lg leading-none opacity-60 hover:opacity-100">
+              ×
+            </button>
+          </div>
         </div>
       )}
 
-      {state.items.length === 0 ? (
-        <section className="flex flex-1 flex-col items-center justify-center gap-6 rounded-2xl border border-dashed px-6 py-16 text-center">
-          <div className="text-6xl" aria-hidden>
-            🧾 → 📅 → 🍽️
-          </div>
-          <div className="max-w-md space-y-2">
-            <h2 className="text-xl font-semibold">Your fridge timeline is empty</h2>
-            <p className="text-sm text-muted-foreground">
-              Paste an order email from Instacart, Amazon Fresh, Walmart or DoorDash. Every item gets a shelf life from the USDA FoodKeeper table and a
-              spot in a value-maximising dinner plan.
-            </p>
-          </div>
-          <div className="flex flex-wrap justify-center gap-2">
-            <Button size="lg" onClick={loadDemo}>
-              Use Thursday&apos;s Instacart receipt
-            </Button>
-            <Button size="lg" variant="outline" onClick={() => setReceiptOpen(true)}>
-              Paste my own
-            </Button>
-          </div>
-        </section>
+      {/* ---- Main content ---- */}
+      {!hasItems ? (
+        <EmptyHero onDemo={loadDemo} onOpen={() => setReceiptOpen(true)} />
       ) : (
-        <>
+        <main className="flex flex-1 flex-col gap-6 px-4 py-6 md:px-8 md:py-8">
           <Headline plan={plan} retailer={state.retailer} />
 
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
-            <section className="space-y-3">
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)]">
+            {/* Left: timeline */}
+            <section className="space-y-3 min-w-0">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-sm font-medium text-muted-foreground">
-                  Fridge timeline · {perishableCount} perishables
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-sm font-semibold">
+                    Fridge timeline
+                  </h2>
+                  <Badge variant="secondary" className="font-normal">
+                    {perishableCount} items
+                  </Badge>
                   {state.lastSource && (
-                    <Badge variant="secondary" className="ml-2 font-normal">
-                      parsed {state.lastSource === "k2" ? "by K2" : "locally"}
+                    <Badge variant="outline" className="font-normal text-primary">
+                      read {state.lastSource === "k2" ? "by IFM K2" : "locally"}
                     </Badge>
                   )}
                   {unconfirmed > 0 && (
-                    <Badge variant="outline" className="ml-2 border-amber-400/40 font-normal text-amber-200">
+                    <Badge variant="outline" className="border-amber-400/40 font-normal text-amber-200">
                       {unconfirmed} to confirm
                     </Badge>
                   )}
-                </h2>
+                </div>
                 <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                  <span className="inline-flex items-center gap-1">
-                    <i className="size-2 rounded-full bg-emerald-400" /> 4+ days
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <i className="size-2 rounded-full bg-amber-400" /> 2–3 days
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <i className="size-2 rounded-full bg-rose-400" /> eat now
-                  </span>
-                  <span className="inline-flex items-center gap-1">🍴 planned</span>
+                  <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-emerald-400 inline-block" />4+ days</span>
+                  <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-amber-400 inline-block" />2–3 days</span>
+                  <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-rose-400 inline-block" />eat now</span>
+                  <span>🍴 planned</span>
                 </div>
               </div>
+
               <AddItem onAdd={handleAdd} />
+
               <FridgeTimeline
                 items={dated}
                 plan={plan}
@@ -230,23 +344,28 @@ export function DiningCar() {
                 onConfirm={(item) => setConfirming(item)}
                 onRemove={(id) => setState((s) => ({ ...s, items: s.items.filter((it) => it.id !== id) }))}
               />
+
               <p className="px-1 text-[11px] text-muted-foreground">
-                Toggle where each item lives — counter, fridge, freezer — and the clocks change. Shelf lives from USDA FoodKeeper; opened-package rules apply where the data has them.
+                Toggle where each item lives (counter / fridge / freezer) and the deadline changes live. Shelf lives from USDA FoodKeeper.
               </p>
             </section>
 
-            <aside>
+            {/* Right: plan */}
+            <aside className="space-y-0 min-w-0">
               <PlanPanel plan={plan} items={dated} today={today} />
             </aside>
           </div>
-        </>
+        </main>
       )}
 
-      <footer className="mt-auto border-t pt-4 text-xs text-muted-foreground">
-        K2 reads the receipt · USDA FoodKeeper sets the clocks · an exact dynamic program picks one dinner a night to maximise dollars eaten before they expire ·
-        every dinner is verified against what you actually own.
+      {/* ---- Footer ---- */}
+      <footer className="border-t border-white/8 px-4 py-3 text-center text-[11px] text-muted-foreground md:px-8">
+        IFM K2-Horizon-375B reads receipts · USDA FoodKeeper sets the clocks · exact DP maximises dollars eaten before expiry · every recipe verified against your inventory
+        <span className="mx-2">·</span>
+        <span className="font-medium text-foreground">HackCMU 2026 · Food Track</span>
       </footer>
 
+      {/* ---- Dialogs ---- */}
       <ReceiptDialog open={receiptOpen} onOpenChange={setReceiptOpen} onExtracted={handleExtracted} />
       <ConfirmDialog
         item={confirming}

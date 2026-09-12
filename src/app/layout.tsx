@@ -13,9 +13,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Dining Car — eat-by alarms from your grocery receipt",
+  title: "Dining Car — Stop throwing money in the bin",
   description:
-    "Forward your grocery receipt. Dining Car puts eat-by alarms on your calendar and tells you what to cook tonight so nothing rots.",
+    "Forward your grocery receipt. IFM K2 reads it, USDA FoodKeeper sets eat-by clocks, and a value-maximising dinner plan ensures nothing rots.",
+  keywords: ["food waste", "grocery receipt", "meal planning", "IFM K2", "hackathon"],
 };
 
 export const viewport: Viewport = {

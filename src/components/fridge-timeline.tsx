@@ -22,12 +22,12 @@ function urgency(daysLeft: number | null): "expired" | "red" | "amber" | "green"
   return "green";
 }
 
-const BAR_CLASS: Record<ReturnType<typeof urgency>, string> = {
-  expired: "bg-[repeating-linear-gradient(135deg,var(--color-rose-500)_0_6px,transparent_6px_12px)] opacity-50",
-  red: "bg-gradient-to-r from-rose-500/70 to-rose-400",
-  amber: "bg-gradient-to-r from-amber-500/60 to-amber-400",
-  green: "bg-gradient-to-r from-emerald-500/50 to-emerald-400",
-  none: "bg-muted",
+const BAR_BG: Record<ReturnType<typeof urgency>, string> = {
+  expired: "bg-rose-500/30 striped",
+  red: "bg-gradient-to-r from-rose-600/80 to-rose-400",
+  amber: "bg-gradient-to-r from-amber-500/70 to-amber-400",
+  green: "bg-gradient-to-r from-emerald-600/60 to-emerald-400",
+  none: "bg-muted/60",
 };
 
 const TEXT_CLASS: Record<ReturnType<typeof urgency>, string> = {
@@ -40,8 +40,8 @@ const TEXT_CLASS: Record<ReturnType<typeof urgency>, string> = {
 
 function daysLeftLabel(item: DatedItem, today: string): string {
   if (!item.eatBy || item.daysLeft === null) return "no data";
-  if (item.daysLeft < 0) return `past by ${-item.daysLeft}d`;
-  if (item.daysLeft === 0) return "eat today";
+  if (item.daysLeft < 0) return `expired ${-item.daysLeft}d ago`;
+  if (item.daysLeft === 0) return "eat TODAY";
   if (item.daysLeft === 1) return "eat by tomorrow";
   return `eat by ${formatRelativeDay(item.eatBy, today)}`;
 }
@@ -79,17 +79,26 @@ export function FridgeTimeline({ items, plan, today, onStorageChange, onConfirm,
 
   return (
     <div className="space-y-2">
-      <div className="hidden items-center gap-3 pl-[13.5rem] pr-[7.5rem] text-[10px] uppercase tracking-wider text-muted-foreground md:flex">
+      {/* Axis labels — desktop only */}
+      <div className="hidden items-center gap-3 pl-[14rem] pr-[8rem] text-[10px] font-medium uppercase tracking-wider text-muted-foreground md:flex">
         <div className="relative h-4 flex-1">
           {Array.from({ length: AXIS_SPAN + 1 }).map((_, i) => {
             const iso = addDays(axisStart, i);
             const offset = i - AXIS_BEFORE;
             const d = parseISODate(iso);
-            const label = offset === 0 ? "Today" : offset === 7 ? "+1 wk" : offset === 14 ? "+2 wk" : offset > 0 && offset < 7 ? ["S", "M", "T", "W", "T", "F", "S"][d.getDay()] : "";
+            const label =
+              offset === 0 ? "Today" :
+              offset === 7 ? "+1 wk" :
+              offset === 14 ? "+2 wk" :
+              (offset > 0 && offset < 7) ? ["S", "M", "T", "W", "T", "F", "S"][d.getDay()] :
+              "";
             return (
               <span
                 key={iso}
-                className={cn("absolute -translate-x-1/2", offset === 0 && "font-semibold text-primary")}
+                className={cn(
+                  "absolute -translate-x-1/2 transition-colors",
+                  offset === 0 && "font-bold text-primary",
+                )}
                 style={{ left: `${(i / AXIS_SPAN) * 100}%` }}
               >
                 {label}
@@ -99,8 +108,9 @@ export function FridgeTimeline({ items, plan, today, onStorageChange, onConfirm,
         </div>
       </div>
 
-      <ul className="divide-y divide-border/60 rounded-xl border bg-card/60">
-        {perishables.map((item) => {
+      {/* Timeline rows */}
+      <ul className="overflow-hidden rounded-2xl border border-white/8 bg-card/70 backdrop-blur-sm">
+        {perishables.map((item, idx) => {
           const level = urgency(item.daysLeft);
           const entry = FOOD_BY_ID[item.foodId];
           const options = storageOptions(entry, item.category);
@@ -109,59 +119,92 @@ export function FridgeTimeline({ items, plan, today, onStorageChange, onConfirm,
           const start = pct(item.purchaseDate);
           const end = item.eatBy ? pct(item.eatBy) : 100;
           const clippedRight = item.eatBy ? daysBetween(axisStart, item.eatBy) > AXIS_SPAN : true;
+          const isRescued = plan.coveredItemIds.has(item.id);
 
           return (
-            <li key={item.id} className="group grid gap-2 px-3 py-2.5 md:grid-cols-[13rem_1fr_7rem] md:items-center md:gap-3">
-              <div className="flex min-w-0 items-center gap-2.5">
-                <span className="text-xl leading-none" aria-hidden>
+            <li
+              key={item.id}
+              className="group animate-slide-up divide-x divide-border/40 border-b border-border/40 last:border-b-0 md:grid md:grid-cols-[14rem_1fr_8rem]"
+              style={{ animationDelay: `${idx * 50}ms` }}
+            >
+              {/* Name cell */}
+              <div className="flex min-w-0 items-center gap-2.5 px-3 py-2.5 md:py-2">
+                <div
+                  className={cn(
+                    "flex size-8 shrink-0 items-center justify-center rounded-lg text-xl",
+                    isRescued ? "bg-emerald-400/15" : level === "red" ? "bg-rose-400/15" : level === "amber" ? "bg-amber-400/10" : "bg-muted/40",
+                  )}
+                >
                   {item.emoji}
-                </span>
+                </div>
                 <div className="min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="truncate text-sm font-medium">{item.displayName}</span>
+                  <div className="flex flex-wrap items-center gap-1">
+                    <span className="truncate text-sm font-medium leading-none">{item.displayName}</span>
+                    {isRescued && (
+                      <span className="rounded-full bg-emerald-400/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-300">
+                        planned
+                      </span>
+                    )}
                     {needsConfirm && (
                       <button
                         type="button"
                         onClick={() => onConfirm(item)}
-                        className="inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-400/40 bg-amber-400/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-200 hover:bg-amber-400/20"
-                        title={`Matched "${item.rawLine}" at ${(item.confidence * 100).toFixed(0)}% confidence — tap to confirm`}
+                        className="inline-flex items-center gap-0.5 rounded-full border border-amber-400/40 bg-amber-400/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-200 hover:bg-amber-400/20"
+                        title={`Matched at ${(item.confidence * 100).toFixed(0)}% — tap to confirm`}
                       >
-                        <AlertTriangle className="size-3" /> Confirm?
+                        <AlertTriangle className="size-2.5" /> confirm?
                       </button>
                     )}
                   </div>
-                  <div className="truncate text-[11px] text-muted-foreground" title={item.rawLine}>
-                    {item.unit ? `${item.unit} · ` : item.quantity > 1 ? `×${item.quantity} · ` : ""}
-                    {formatMoney(item.price)}
-                    {item.source === "manual" && item.price > 0 ? " est." : ""}
-                    {item.source === "receipt" && item.rawLine !== item.displayName ? ` · ${item.rawLine.replace(/\$?\d+\.\d{2}.*$/, "").trim().slice(0, 28)}` : ""}
+                  <div className="mt-0.5 flex flex-wrap gap-x-1 text-[11px] text-muted-foreground">
+                    <span>{formatMoney(item.price)}</span>
+                    {item.unit && <span>· {item.unit}</span>}
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3">
-                <div className="relative h-7 flex-1 overflow-hidden rounded-md bg-muted/40">
-                  <div className="absolute inset-y-0 w-px bg-primary/70" style={{ left: `${(AXIS_BEFORE / AXIS_SPAN) * 100}%` }} />
+              {/* Timeline bar cell */}
+              <div className="flex items-center gap-3 px-3 py-2">
+                <div className="relative h-7 flex-1 overflow-hidden rounded-lg bg-muted/30">
+                  {/* Today marker */}
                   <div
-                    className={cn("absolute inset-y-1 rounded-sm transition-all duration-500", BAR_CLASS[level], clippedRight && "rounded-r-none")}
-                    style={{ left: `${start}%`, width: `${Math.max(1.5, end - start)}%` }}
-                    title={item.eatBy ? `Bought ${item.purchaseDate} · eat by ${item.eatBy}` : "No shelf-life data"}
+                    className="absolute inset-y-0 w-px bg-primary/60"
+                    style={{ left: `${(AXIS_BEFORE / AXIS_SPAN) * 100}%` }}
                   />
+                  {/* Shelf-life bar */}
+                  <div
+                    className={cn(
+                      "bar-grow absolute inset-y-1.5 rounded",
+                      BAR_BG[level],
+                      clippedRight && "rounded-r-none",
+                    )}
+                    style={{
+                      left: `${start}%`,
+                      width: `${Math.max(1.5, end - start)}%`,
+                      animationDelay: `${idx * 50 + 300}ms`,
+                    }}
+                    title={item.eatBy ? `Eat by ${item.eatBy}` : "No shelf-life data"}
+                  />
+                  {/* Planned-use marker */}
                   {usedOn !== undefined && (
                     <div
-                      className="absolute top-0 flex h-full -translate-x-1/2 items-center text-[10px]"
+                      className="absolute top-0 flex h-full -translate-x-1/2 items-center"
                       style={{ left: `${pct(addDays(today, usedOn))}%` }}
-                      title={`Planned for ${usedOn === 0 ? "tonight" : formatRelativeDay(addDays(today, usedOn), today)}`}
                     >
-                      <span className="rounded-full bg-background/90 px-1 leading-4 shadow ring-1 ring-border">🍴</span>
+                      <span className="z-10 rounded-full bg-card/90 px-1 text-[10px] shadow ring-1 ring-border">
+                        🍴
+                      </span>
                     </div>
                   )}
                 </div>
-                <span className={cn("w-28 shrink-0 text-right text-xs font-medium tabular-nums", TEXT_CLASS[level])}>{daysLeftLabel(item, today)}</span>
+                <span className={cn("hidden w-28 shrink-0 text-right text-[11px] font-semibold tabular-nums md:block", TEXT_CLASS[level])}>
+                  {daysLeftLabel(item, today)}
+                </span>
               </div>
 
-              <div className="flex items-center justify-between gap-1 md:justify-end">
-                <div className="flex items-center rounded-md border bg-background/40 p-0.5">
+              {/* Controls cell */}
+              <div className="flex items-center justify-end gap-1 px-2 py-2">
+                <div className="flex overflow-hidden rounded-lg border border-white/10 bg-background/30">
                   {options.map((opt) => {
                     const Icon = STORAGE_META[opt].icon;
                     const active = item.storage === opt;
@@ -171,8 +214,10 @@ export function FridgeTimeline({ items, plan, today, onStorageChange, onConfirm,
                         type="button"
                         onClick={() => onStorageChange(item.id, opt)}
                         className={cn(
-                          "rounded p-1 transition-colors",
-                          active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                          "px-1.5 py-1.5 text-xs transition-colors",
+                          active
+                            ? "bg-primary text-primary-foreground"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground",
                         )}
                         title={`${STORAGE_META[opt].label}${active ? " (current)" : ""}`}
                         aria-pressed={active}
@@ -186,7 +231,7 @@ export function FridgeTimeline({ items, plan, today, onStorageChange, onConfirm,
                 <Button
                   variant="ghost"
                   size="icon-xs"
-                  className="text-muted-foreground opacity-60 hover:text-rose-300 md:opacity-0 md:group-hover:opacity-100"
+                  className="shrink-0 text-muted-foreground opacity-60 hover:text-rose-300 md:opacity-0 md:group-hover:opacity-100"
                   onClick={() => onRemove(item.id)}
                   aria-label={`Remove ${item.displayName}`}
                 >
@@ -200,11 +245,16 @@ export function FridgeTimeline({ items, plan, today, onStorageChange, onConfirm,
 
       {staples.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5 px-1 pt-1 text-xs text-muted-foreground">
-          <span className="mr-1">Pantry, no clock:</span>
+          <span className="mr-1 font-medium">Pantry (no clock):</span>
           {staples.map((s) => (
-            <Badge key={s.id} variant="outline" className="gap-1 font-normal">
+            <Badge key={s.id} variant="outline" className="gap-1 font-normal opacity-60">
               <span aria-hidden>{s.emoji}</span> {s.displayName}
-              <button type="button" onClick={() => onRemove(s.id)} className="ml-0.5 text-muted-foreground hover:text-rose-300" aria-label={`Remove ${s.displayName}`}>
+              <button
+                type="button"
+                onClick={() => onRemove(s.id)}
+                className="ml-0.5 opacity-70 hover:text-rose-300"
+                aria-label={`Remove ${s.displayName}`}
+              >
                 ×
               </button>
             </Badge>

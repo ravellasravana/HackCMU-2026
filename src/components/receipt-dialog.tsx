@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, Mail } from "lucide-react";
+import { Loader2, ScanLine, Mail } from "lucide-react";
 import { addDays, todayISO } from "@/lib/dates";
 import { RECEIPT_PRESETS } from "@/lib/demo";
 import type { ReceiptMeta } from "@/lib/normalize";
@@ -69,12 +69,12 @@ export function ReceiptDialog({ open, onOpenChange, onExtracted }: Props) {
             <Mail className="size-4" /> Forward a grocery receipt
           </DialogTitle>
           <DialogDescription>
-            Paste the order email from Instacart, Amazon Fresh, Walmart, DoorDash — any retailer. Cryptic register lines are fine.
+            Paste the order confirmation from Instacart, Amazon Fresh, Walmart, DoorDash — any retailer. Even cryptic register lines work.
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <span>Try a sample:</span>
+          <span className="font-medium">Load a sample:</span>
           {RECEIPT_PRESETS.map((p) => (
             <Button key={p.id} variant="outline" size="xs" onClick={() => loadPreset(p.id)} title={p.description}>
               {p.label}
@@ -82,25 +82,51 @@ export function ReceiptDialog({ open, onOpenChange, onExtracted }: Props) {
           ))}
         </div>
 
-        <Textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder={"1 × Organic Baby Spinach, 5 oz    $3.49\n1 × Strawberries, 1 lb            $4.99\nCHKN BRST BNLS 1.2LB              008.39 F"}
-          className="max-h-[50vh] min-h-56 font-mono text-xs leading-relaxed"
-          spellCheck={false}
-        />
+        {/* Textarea + scan overlay */}
+        <div className="relative">
+          <Textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder={"1 × Organic Baby Spinach, 5 oz    $3.49\n1 × Strawberries, 1 lb            $4.99\nCHKN BRST BNLS 1.2LB              008.39 F\n..."}
+            className="max-h-[45vh] min-h-52 font-mono text-xs leading-relaxed"
+            spellCheck={false}
+          />
+          {busy && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-lg bg-background/90 backdrop-blur-sm">
+              <div className="relative overflow-hidden rounded-lg border border-primary/30 bg-card px-6 py-4 text-center">
+                {/* Scan line */}
+                <div className="scan-line pointer-events-none absolute inset-x-0 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent opacity-80" />
+                <ScanLine className="mx-auto mb-2 size-8 text-primary animate-pulse" />
+                <p className="text-sm font-medium">
+                  IFM K2 is reading your receipt…
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Extracting items → matching FoodKeeper shelf lives
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
 
-        {error && <p className="rounded-md border border-rose-400/30 bg-rose-400/10 px-3 py-2 text-xs text-rose-200">{error}</p>}
+        {error && (
+          <p className="rounded-lg border border-rose-400/30 bg-rose-400/10 px-3 py-2 text-xs text-rose-200">
+            {error}
+          </p>
+        )}
 
-        <DialogFooter className="items-center gap-2 sm:justify-between">
-          <p className="text-xs text-muted-foreground">Items are mapped to USDA FoodKeeper shelf lives. Uncertain lines get a confirm tap.</p>
-          <Button onClick={extract} disabled={busy || !text.trim()}>
+        <DialogFooter className="flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-muted-foreground">
+            Items map to USDA FoodKeeper shelf lives. Low-confidence lines get a confirm tap.
+          </p>
+          <Button onClick={extract} disabled={busy || !text.trim()} size="lg">
             {busy ? (
               <>
-                <Loader2 className="animate-spin" /> Reading receipt…
+                <Loader2 className="animate-spin" /> Reading…
               </>
             ) : (
-              "Set the clocks"
+              <>
+                <ScanLine /> Set the clocks
+              </>
             )}
           </Button>
         </DialogFooter>

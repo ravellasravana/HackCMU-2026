@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Clock, Users, ShieldCheck, Snowflake, Sparkles, ChevronDown } from "lucide-react";
+import { Clock, Users, ShieldCheck, Snowflake, Sparkles, ChevronDown, ChefHat } from "lucide-react";
 import { formatLongDate, formatMoney, formatRelativeDay, formatShortDate } from "@/lib/dates";
 import type { DatedItem, NightPlan, Plan } from "@/lib/scheduler";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,11 +17,16 @@ function rescuedNames(night: NightPlan, items: DatedItem[]): string[] {
 
 function GroundingBadge({ night }: { night: NightPlan }) {
   if (!night.grounding) return null;
-  const { owned, total } = night.grounding;
+  const { owned, total, score } = night.grounding;
+  const pct = Math.round(score * 100);
   return (
-    <Badge variant="outline" className="gap-1 border-emerald-400/30 bg-emerald-400/10 font-normal text-emerald-200" title="LLM output verified against your inventory + pantry staples">
-      <ShieldCheck className="size-3" /> Uses {owned} of {total} ingredients you own
-    </Badge>
+    <div
+      className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-1 text-xs font-medium text-emerald-200"
+      title="Every ingredient verified against what you actually own + pantry staples"
+    >
+      <ShieldCheck className="size-3.5" />
+      Uses {owned} of {total} ingredients you own ({pct}% grounded)
+    </div>
   );
 }
 
@@ -30,58 +35,78 @@ function TonightCard({ night, items }: { night: NightPlan; items: DatedItem[] })
   if (!night.recipe) {
     return (
       <Card className="border-dashed">
-        <CardContent className="p-5 text-sm text-muted-foreground">
-          Nothing in the kitchen makes a grounded dinner tonight. Add what you bought, or paste a receipt.
+        <CardContent className="p-6 text-center text-sm text-muted-foreground">
+          <div className="mb-2 text-3xl">🤷</div>
+          Nothing in your kitchen makes a complete dinner tonight. Add more items or paste a receipt.
         </CardContent>
       </Card>
     );
   }
+
   const rescued = rescuedNames(night, items);
+  const hasRescue = rescued.length > 0;
+
   return (
-    <Card className="border-primary/30 bg-gradient-to-b from-primary/10 to-card">
-      <CardHeader className="pb-2">
-        <p className="text-xs font-medium uppercase tracking-[0.2em] text-primary">Tonight · {formatShortDate(night.date)}</p>
-        <CardTitle className="flex items-start gap-3 text-xl leading-snug">
-          <span className="text-3xl leading-none" aria-hidden>
-            {night.recipe.emoji}
-          </span>
-          <span>{night.recipe.title}</span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <span className="inline-flex items-center gap-1">
-            <Clock className="size-3" /> {night.recipe.minutes} min
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <Users className="size-3" /> {night.recipe.servings} servings
-          </span>
+    <div className="relative overflow-hidden rounded-2xl border border-primary/30 bg-gradient-to-b from-primary/15 via-card to-card shadow-xl">
+      {/* Glow */}
+      <div className="pointer-events-none absolute -top-10 left-1/2 size-40 -translate-x-1/2 rounded-full bg-primary/20 blur-3xl" />
+
+      <div className="relative p-6">
+        {/* Badge */}
+        <div className="mb-4 flex items-center justify-between">
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.15em] text-primary">
+            <ChefHat className="size-3" />
+            Tonight · {formatShortDate(night.date)}
+          </div>
           {night.recipe.source === "k2" && (
-            <Badge variant="secondary" className="gap-1 font-normal">
-              <Sparkles className="size-3" /> K2
+            <Badge variant="secondary" className="gap-1 text-xs font-normal">
+              <Sparkles className="size-3 text-primary" />
+              IFM K2 recipe
             </Badge>
           )}
         </div>
+
+        {/* Emoji + Title */}
+        <div className="mb-4 flex items-start gap-4">
+          <div className="flex size-16 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-4xl shadow-inner">
+            {night.recipe.emoji}
+          </div>
+          <div>
+            <h3 className="text-xl font-bold leading-tight">{night.recipe.title}</h3>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1"><Clock className="size-3" />{night.recipe.minutes} min</span>
+              <span className="flex items-center gap-1"><Users className="size-3" />{night.recipe.servings} servings</span>
+            </div>
+          </div>
+        </div>
+
         <GroundingBadge night={night} />
-        {rescued.length > 0 ? (
-          <p className="text-sm">
-            Rescues <span className="font-semibold text-emerald-300">{formatMoney(night.valueSaved)}</span> that would otherwise turn: {rescued.join(", ")}.
-          </p>
-        ) : (
-          <p className="text-sm text-muted-foreground">Nothing urgent tonight — this one just uses what you have.</p>
+
+        {hasRescue && (
+          <div className="mt-3 rounded-xl bg-emerald-400/10 px-4 py-3 text-sm">
+            <span className="font-semibold text-emerald-300">Saves {formatMoney(night.valueSaved)}</span>{" "}
+            <span className="text-muted-foreground">tonight — rescues {rescued.join(", ")} before they turn.</span>
+          </div>
         )}
-        <button type="button" onClick={() => setOpen((o) => !o)} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-          <ChevronDown className={cn("size-3 transition-transform", open && "rotate-180")} /> {open ? "Hide" : "Show"} steps
+
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="mt-4 flex w-full items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
+        >
+          <span>How to make it</span>
+          <ChevronDown className={cn("size-3.5 transition-transform duration-200", open && "rotate-180")} />
         </button>
+
         {open && (
-          <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
+          <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-sm text-muted-foreground">
             {night.recipe.steps.map((s, i) => (
               <li key={i}>{s}</li>
             ))}
           </ol>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -94,29 +119,34 @@ export function PlanPanel({ plan, items, today }: { plan: Plan; items: DatedItem
       <TonightCard night={tonight} items={items} />
 
       {upcoming.length > 0 && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Rest of the week</CardTitle>
+        <Card className="overflow-hidden">
+          <CardHeader className="pb-0 pt-4">
+            <CardTitle className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+              Rest of the week
+            </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <ul className="divide-y divide-border/60">
               {upcoming.map((night) => {
                 const rescued = rescuedNames(night, items);
                 return (
-                  <li key={night.date} className="flex items-start gap-3 px-4 py-2.5">
-                    <div className="w-12 shrink-0 pt-0.5 text-xs font-medium capitalize text-muted-foreground">{formatRelativeDay(night.date, today)}</div>
-                    <span className="text-lg leading-none" aria-hidden>
+                  <li key={night.date} className="flex items-center gap-3 px-4 py-3">
+                    <div className="w-10 shrink-0 text-xs font-medium text-muted-foreground">
+                      {formatRelativeDay(night.date, today)}
+                    </div>
+                    <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-lg">
                       {night.recipe!.emoji}
-                    </span>
+                    </div>
                     <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium leading-snug">{night.recipe!.title}</div>
+                      <div className="truncate text-sm font-medium">{night.recipe!.title}</div>
                       <div className="text-xs text-muted-foreground">
-                        {rescued.length ? (
+                        {rescued.length > 0 ? (
                           <>
-                            <span className="text-emerald-300">{formatMoney(night.valueSaved)}</span> · {rescued.join(", ")}
+                            <span className="font-medium text-emerald-300">{formatMoney(night.valueSaved)}</span>{" "}
+                            saved · {rescued.join(", ")}
                           </>
                         ) : (
-                          <>uses {night.grounding?.owned} of {night.grounding?.total} ingredients you own</>
+                          <>{night.grounding?.owned}/{night.grounding?.total} ingredients you own</>
                         )}
                       </div>
                     </div>
@@ -129,42 +159,47 @@ export function PlanPanel({ plan, items, today }: { plan: Plan; items: DatedItem
       )}
 
       {(plan.decisions.length > 0 || plan.alreadyExpired.length > 0) && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Freeze-or-eat decisions</CardTitle>
+        <Card className="border-amber-400/20 bg-amber-400/5">
+          <CardHeader className="pb-2 pt-4">
+            <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.15em] text-amber-300">
+              <Snowflake className="size-3.5" />
+              Freeze-or-eat decisions
+            </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2.5 pt-0">
+          <CardContent className="space-y-3 pb-4 pt-0">
             {plan.decisions.map((d) => (
-              <div key={d.item.id} className="flex items-start gap-2.5 text-sm">
+              <div key={d.item.id} className="flex items-start gap-3 text-sm">
                 {d.kind === "freeze" ? (
                   <>
-                    <Snowflake className="mt-0.5 size-4 shrink-0 text-sky-300" />
-                    <p>
-                      <span className="font-medium">Freeze the {d.item.displayName.toLowerCase()}</span> by {formatRelativeDay(d.freezeBy, today)} and it&apos;s good until{" "}
-                      {formatLongDate(d.goodUntil)}. Saves {formatMoney(d.value)}.
-                    </p>
+                    <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sky-400/10 text-sky-300">
+                      <Snowflake className="size-4" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-sky-200">Freeze the {d.item.displayName.toLowerCase()}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Freeze by {formatRelativeDay(d.freezeBy, today)} → good until {formatLongDate(d.goodUntil)}. Saves {formatMoney(d.value)}.
+                      </p>
+                    </div>
                   </>
                 ) : (
                   <>
-                    <span className="mt-0.5 shrink-0 text-base leading-none" aria-hidden>
+                    <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-rose-400/10 text-xl">
                       {d.item.emoji}
-                    </span>
-                    <p>
-                      No dinner fits the <span className="font-medium">{d.item.displayName.toLowerCase()}</span> before {formatRelativeDay(d.by, today)} and it doesn&apos;t freeze well —
-                      eat it as a snack or it&apos;s <span className="text-rose-300">{formatMoney(d.value)}</span> in the bin.
-                    </p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-rose-200">Eat the {d.item.displayName.toLowerCase()} as a snack</p>
+                      <p className="text-xs text-muted-foreground">
+                        Doesn&apos;t freeze well. Eat by {formatRelativeDay(d.by, today)} or {formatMoney(d.value)} goes in the bin.
+                      </p>
+                    </div>
                   </>
                 )}
               </div>
             ))}
             {plan.alreadyExpired.map((it) => (
-              <div key={it.id} className="flex items-start gap-2.5 text-sm text-muted-foreground">
-                <span className="mt-0.5 shrink-0 text-base leading-none" aria-hidden>
-                  {it.emoji}
-                </span>
-                <p>
-                  {it.displayName} passed its eat-by {it.eatBy ? formatRelativeDay(it.eatBy, today) : ""}. Check it before cooking with it.
-                </p>
+              <div key={it.id} className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>{it.emoji}</span>
+                {it.displayName} passed its eat-by {it.eatBy ? formatRelativeDay(it.eatBy, today) : ""}. Check before cooking.
               </div>
             ))}
           </CardContent>
