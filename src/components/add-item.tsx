@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, Mic, Plus, Square, X } from "lucide-react";
+import { Loader2, Mic, Plus, Square } from "lucide-react";
 import { todayISO } from "@/lib/dates";
 import { FOOD_BY_ID } from "@/lib/foodkeeper";
 import {
@@ -19,11 +19,16 @@ import { Input } from "@/components/ui/input";
 interface Props {
   onAdd: (text: string) => string | null;
   onExtracted: (result: ExtractResult) => void;
+  /** Focus the text field immediately — used on the first-run screen, where this *is* the whole UI. */
+  autoFocus?: boolean;
 }
 
 type ModelState = "checking" | "needed" | "downloading" | "ready";
 
-export function AddItem({ onAdd, onExtracted }: Props) {
+/** How long the "✓ Added: ..." confirmation stays up after a voice add. */
+const JUST_ADDED_MS = 4000;
+
+export function AddItem({ onAdd, onExtracted, autoFocus }: Props) {
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -31,7 +36,7 @@ export function AddItem({ onAdd, onExtracted }: Props) {
   const [downloadProgress, setDownloadProgress] = useState<{ percent: number; message: string } | null>(null);
   const [session, setSession] = useState<ListeningSession | null>(null);
   const [liveText, setLiveText] = useState("");
-  const [pendingLines, setPendingLines] = useState<ExtractedLine[]>([]);
+  const [justAdded, setJustAdded] = useState<ExtractedLine[]>([]);
 
   useEffect(() => {
     if (!speechSupported()) return;
@@ -83,11 +88,17 @@ export function AddItem({ onAdd, onExtracted }: Props) {
       setError(transcript ? `Heard "${transcript}" but couldn't pick out any foods.` : "Didn't catch anything — try again.");
       return;
     }
-    setPendingLines((prev) => [...prev, ...lines]);
+    // Straight to the fridge — no extra "review, then add" tap. Anything the
+    // matcher wasn't sure about still gets the same amber confirm chip a
+    // pasted receipt line would.
+    onExtracted({ lines, meta: { retailer: null, purchaseDate: null }, source: "voice", fallbackDate: todayISO() });
+    setJustAdded(lines);
+    window.setTimeout(() => setJustAdded((prev) => (prev === lines ? [] : prev)), JUST_ADDED_MS);
   }
 
   async function handleMicClick() {
     setError(null);
+    setJustAdded([]);
     if (session) {
       await stopListening();
       return;
@@ -97,15 +108,6 @@ export function AddItem({ onAdd, onExtracted }: Props) {
       return;
     }
     if (modelState === "ready") await beginListening();
-  }
-
-  function removePending(index: number) {
-    setPendingLines((prev) => prev.filter((_, i) => i !== index));
-  }
-
-  function addPending() {
-    onExtracted({ lines: pendingLines, meta: { retailer: null, purchaseDate: null }, source: "voice", fallbackDate: todayISO() });
-    setPendingLines([]);
   }
 
   return (
@@ -126,6 +128,7 @@ export function AddItem({ onAdd, onExtracted }: Props) {
           placeholder="Add something you bought this week — “avocados”, “2 lb chicken thighs $9.49”"
           aria-label="Add an item"
           className="h-9"
+          autoFocus={autoFocus}
         />
         <Button type="submit" size="lg" disabled={!text.trim()}>
           <Plus /> Add
@@ -175,40 +178,20 @@ export function AddItem({ onAdd, onExtracted }: Props) {
         </p>
       )}
 
-      {pendingLines.length > 0 && (
-        <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-3">
-          <p className="text-xs font-medium text-muted-foreground">Heard {pendingLines.length} {pendingLines.length === 1 ? "item" : "items"} — remove anything wrong, then add:</p>
-          <ul className="flex flex-wrap gap-1.5">
-            {pendingLines.map((line, i) => {
-              const food = line.foodId ? FOOD_BY_ID[line.foodId] : undefined;
-              return (
-                <li
-                  key={i}
-                  className="flex items-center gap-1.5 rounded-full border border-white/10 bg-card py-1 pl-2.5 pr-1.5 text-xs"
-                >
-                  <span aria-hidden>{food?.emoji ?? "❓"}</span>
-                  <span>{food?.name ?? line.displayName}</span>
-                  <button
-                    type="button"
-                    onClick={() => removePending(i)}
-                    className="rounded-full p-0.5 text-muted-foreground hover:bg-white/10 hover:text-foreground"
-                    aria-label={`Remove ${food?.name ?? line.displayName}`}
-                  >
-                    <X className="size-3" />
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-          <div className="flex justify-end gap-2">
-            <Button type="button" size="sm" variant="ghost" onClick={() => setPendingLines([])}>
-              Discard
-            </Button>
-            <Button type="button" size="sm" onClick={addPending}>
-              Add {pendingLines.length} {pendingLines.length === 1 ? "item" : "items"}
-            </Button>
-          </div>
-        </div>
+      {justAdded.length > 0 && (
+        <p className="flex flex-wrap items-center gap-1.5 px-1 text-xs text-emerald-300">
+          <span aria-hidden>✓</span> Added:
+          {justAdded.map((line, i) => {
+            const food = line.foodId ? FOOD_BY_ID[line.foodId] : undefined;
+            return (
+              <span key={i} className="inline-flex items-center gap-1 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2 py-0.5">
+                <span aria-hidden>{food?.emoji ?? "❓"}</span>
+                {food?.name ?? line.displayName}
+              </span>
+            );
+          })}
+          <span className="text-muted-foreground">— see them in the timeline below.</span>
+        </p>
       )}
     </div>
   );

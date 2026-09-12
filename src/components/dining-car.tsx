@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CalendarPlus, CalendarCheck2, Mail, RotateCcw, Sparkles, Loader2, TrainFront,
-  TrendingDown, Zap, ChevronRight,
 } from "lucide-react";
 import { addDays, todayISO } from "@/lib/dates";
 import { RECEIPT_PRESETS } from "@/lib/demo";
@@ -35,7 +34,24 @@ function FoodParticle({ emoji, style }: { emoji: string; style: React.CSSPropert
   );
 }
 
-function EmptyHero({ onDemo, onOpen }: { onDemo: () => void; onOpen: () => void }) {
+/**
+ * The very first thing anyone sees. One question, one input, front and
+ * center — say it, type it, or paste a receipt, and the moment anything's
+ * added the app switches straight to the main dashboard (see `hasItems`
+ * below). No copy to read, no separate "get started" click before the
+ * actual input is reachable.
+ */
+function EmptyHero({
+  onAdd,
+  onExtracted,
+  onOpen,
+  onDemo,
+}: {
+  onAdd: (text: string) => string | null;
+  onExtracted: (result: ExtractResult) => void;
+  onOpen: () => void;
+  onDemo: () => void;
+}) {
   return (
     <section className="relative flex flex-1 flex-col items-center justify-center overflow-hidden px-4 py-16 text-center">
       {/* Background particles */}
@@ -52,63 +68,31 @@ function EmptyHero({ onDemo, onOpen }: { onDemo: () => void; onOpen: () => void 
         />
       ))}
 
-      {/* Card */}
-      <div className="relative z-10 w-full max-w-xl space-y-6 animate-float-in">
-        {/* Emoji stack */}
+      <div className="relative z-10 w-full max-w-lg space-y-5 animate-float-in">
         <div className="flex justify-center gap-1 text-5xl">
-          {["🧾", "→", "📅", "→", "🍽️"].map((c, i) => (
-            <span key={i} className={`animate-slide-up delay-${i * 100}`} style={{ animationDelay: `${i * 100}ms` }}>
-              {c}
-            </span>
-          ))}
+          <span className="animate-slide-up">🧾</span>
+          <span className="animate-slide-up" style={{ animationDelay: "100ms" }}>
+            →
+          </span>
+          <span className="animate-slide-up" style={{ animationDelay: "200ms" }}>
+            🍽️
+          </span>
         </div>
 
-        <div className="space-y-3">
-          <h2 className="text-4xl font-black leading-tight tracking-tight md:text-5xl">
-            Stop throwing{" "}
-            <span className="text-rose-400">money</span>{" "}
-            in the bin.
-          </h2>
-          <p className="mx-auto max-w-md text-base text-muted-foreground md:text-lg">
-            Forward your grocery receipt. We read it with IFM K2, set eat-by alarms on every item, and build a dinner plan that keeps as much money in your belly as possible.
-          </p>
-        </div>
+        <h2 className="text-3xl font-black leading-tight tracking-tight md:text-4xl">What did you just buy?</h2>
 
-        {/* Stats row */}
-        <div className="flex flex-wrap justify-center gap-4 py-2">
-          {[
-            { icon: TrendingDown, label: "Average annual food waste per US household", value: "$1,800" },
-            { icon: Zap, label: "Optimised with IFM K2-Horizon-375B", value: "AI-powered" },
-          ].map(({ icon: Icon, label, value }) => (
-            <div key={label} className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5">
-              <Icon className="size-4 text-primary" />
-              <div className="text-left">
-                <div className="text-sm font-bold text-foreground">{value}</div>
-                <div className="max-w-[14rem] text-[11px] leading-tight text-muted-foreground">{label}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* CTAs */}
-        <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-          <Button
-            size="lg"
-            className="animate-glow-pulse gap-2 text-base font-semibold"
-            onClick={onDemo}
-          >
-            <span>🛒</span> Load Thursday&apos;s Instacart receipt
-            <ChevronRight className="size-4" />
-          </Button>
-          <Button size="lg" variant="outline" onClick={onOpen}>
-            <Mail className="size-4" /> Paste my own receipt
-          </Button>
+        <div className="text-left">
+          <AddItem onAdd={onAdd} onExtracted={onExtracted} autoFocus />
         </div>
 
         <p className="text-xs text-muted-foreground">
-          No account, no database, no tracking — everything stays in your browser.
-          <br />
-          Powered by <span className="font-medium text-foreground">IFM K2-Horizon-375B</span> · USDA FoodKeeper shelf lives
+          <button type="button" onClick={onOpen} className="underline decoration-dotted underline-offset-2 hover:text-foreground">
+            paste a whole receipt instead
+          </button>
+          {" · "}
+          <button type="button" onClick={onDemo} className="underline decoration-dotted underline-offset-2 hover:text-foreground">
+            try a demo
+          </button>
         </p>
       </div>
     </section>
@@ -363,7 +347,7 @@ export function DiningCar() {
 
       {/* ---- Main content ---- */}
       {!hasItems ? (
-        <EmptyHero onDemo={loadDemo} onOpen={() => setReceiptOpen(true)} />
+        <EmptyHero onAdd={handleAdd} onExtracted={handleExtracted} onOpen={() => setReceiptOpen(true)} onDemo={loadDemo} />
       ) : (
         <main className="flex flex-1 flex-col gap-6 px-4 py-6 md:px-8 md:py-8">
           <Headline plan={plan} retailer={state.retailer} />
