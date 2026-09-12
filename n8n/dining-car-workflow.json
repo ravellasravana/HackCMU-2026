@@ -1,0 +1,380 @@
+{
+  "name": "Dining Car — receipt → eat-by alarms → tonight's dinner",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {
+          "q": "subject:(receipt OR \"your order\" OR Instacart OR \"Amazon Fresh\" OR Walmart OR DoorDash) newer_than:1d"
+        },
+        "options": {
+          "downloadAttachments": false
+        }
+      },
+      "name": "Gmail Trigger",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1200,
+        0
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_ME",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// n8n Code node — \"Prepare receipt text\"\n// Mode: Run Once for Each Item\n// Input: Gmail Trigger item (text / html / snippet / subject / from)\n// Output: { subject, from, receiptText, receivedAt }\n\nconst m = $input.item.json;\nlet text = m.text || '';\nif (!text && m.html) {\n  text = m.html\n    .replace(/<style[\\s\\S]*?<\\/style>/gi, ' ')\n    .replace(/<script[\\s\\S]*?<\\/script>/gi, ' ')\n    .replace(/<br\\s*\\/?>/gi, '\\n')\n    .replace(/<\\/(p|div|tr|li|h\\d)>/gi, '\\n')\n    .replace(/<[^>]+>/g, ' ')\n    .replace(/&nbsp;/g, ' ')\n    .replace(/&amp;/g, '&')\n    .replace(/&#?\\w+;/g, ' ');\n}\ntext = text\n  .split(/\\r?\\n/)\n  .map((l) => l.replace(/[ \\t]+/g, ' ').trim())\n  .filter(Boolean)\n  .join('\\n')\n  .slice(0, 12000);\n\nreturn { json: { subject: m.subject || '', from: (m.from && m.from.value ? m.from.value[0].address : m.from) || '', receiptText: text, receivedAt: m.date || new Date().toISOString() } };\n"
+      },
+      "name": "Prepare receipt text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -980,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// n8n Code node — \"Build K2 extraction request\"\n// Mode: Run Once for Each Item\n// Input: { receiptText } from \"Prepare receipt text\". Output: { body } for the HTTP Request node.\n\nconst PROMPT = \"You read grocery receipts and order-confirmation emails from any retailer (Instacart, Amazon Fresh, Walmart, DoorDash, Kroger, Target, Whole Foods) and turn them into structured data.\\n\\nReceipt lines are cryptic and abbreviated, e.g. \\\"ORG BBY SPNCH 5OZ\\\" = organic baby spinach, \\\"CHKN BRST BNLS 1.2LB\\\" = boneless chicken breast, \\\"GV WHL MLK GAL\\\" = Great Value whole milk. Expand them.\\n\\nFor every purchased FOOD item, output one object. Skip fees, tips, tax, totals, delivery notes, bags, and non-food items.\\n\\nMap each item to ONE canonical id from this USDA FoodKeeper list, or null if nothing fits:\\nspinach (produce), lettuce (produce), kale (produce), strawberries (produce), blueberries (produce), raspberries (produce), grapes (produce), bananas (produce), apples (produce), avocados (produce), tomatoes (produce), cucumbers (produce), bell_pepper (produce), broccoli (produce), carrots (produce), onions (produce), garlic (produce), potatoes (produce), sweet_potatoes (produce), mushrooms (produce), zucchini (produce), asparagus (produce), green_beans (produce), lemons (produce), limes (produce), cilantro (produce), basil (produce), ginger (produce), corn (produce), celery (produce), cauliflower (produce), mango (produce), oranges (produce), cabbage (produce), salad_kit (produce), milk (dairy), oat_milk (dairy), eggs (eggs), butter (dairy), cheddar (dairy), mozzarella (dairy), parmesan (dairy), yogurt (dairy), cream_cheese (dairy), sour_cream (dairy), heavy_cream (dairy), chicken_breast (meat), chicken_thighs (meat), ground_beef (meat), steak (meat), pork_chops (meat), bacon (meat), sausage (meat), deli_turkey (deli), salmon (seafood), shrimp (seafood), tofu (deli), bread (bakery), tortillas (bakery), bagels (bakery), hummus (deli), salsa (deli), guacamole (deli), fresh_pasta (deli), orange_juice (beverage), frozen_peas (frozen), frozen_berries (frozen), ice_cream (frozen), frozen_pizza (frozen), rice (pantry), pasta (pantry), olive_oil (pantry), canned_beans (pantry), canned_tomatoes (pantry), oats (pantry), flour (pantry), sugar (pantry), peanut_butter (pantry), cereal (pantry), coffee (pantry), chips (pantry), soy_sauce (pantry), stock (pantry), spices (pantry), quinoa (pantry), honey (pantry), coconut_milk (pantry), sparkling_water (beverage)\\n\\nReturn ONLY JSON matching:\\n{\\n  \\\"retailer\\\": string | null,\\n  \\\"purchase_date\\\": \\\"YYYY-MM-DD\\\" | null,\\n  \\\"items\\\": [\\n    {\\n      \\\"raw_line\\\": string,          // the exact receipt line\\n      \\\"name\\\": string,              // human-readable expansion, e.g. \\\"Organic baby spinach\\\"\\n      \\\"canonical\\\": string | null,  // FoodKeeper id from the list above\\n      \\\"category\\\": \\\"produce\\\" | \\\"dairy\\\" | \\\"eggs\\\" | \\\"meat\\\" | \\\"seafood\\\" | \\\"bakery\\\" | \\\"deli\\\" | \\\"beverage\\\" | \\\"frozen\\\" | \\\"pantry\\\",\\n      \\\"quantity\\\": number,\\n      \\\"unit\\\": string | null,       // \\\"lb\\\", \\\"oz\\\", \\\"ct\\\", \\\"gal\\\", ...\\n      \\\"price\\\": number,             // line total in dollars, 0 if unknown\\n      \\\"confidence\\\": number         // 0..1 — how sure you are about the canonical mapping\\n    }\\n  ]\\n}\\n\\nBe honest about confidence: below 0.7 means a human should confirm the mapping.\\n\\nRECEIPT:\\n\\\"\\\"\\\"\\n{{RECEIPT_TEXT}}\\n\\\"\\\"\\\"\";\n\nconst text = $input.item.json.receiptText || '';\nreturn {\n  json: {\n    body: {\n      model: $env.K2_MODEL || 'kimi-k2-0905-preview',\n      temperature: 0.2,\n      max_tokens: 3000,\n      response_format: { type: 'json_object' },\n      messages: [\n        { role: 'system', content: 'You return strictly valid JSON and nothing else.' },\n        { role: 'user', content: PROMPT.replace('{{RECEIPT_TEXT}}', text) },\n      ],\n    },\n  },\n};\n"
+      },
+      "name": "Build K2 extraction request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -760,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.K2_BASE_URL || 'https://api.moonshot.ai/v1').replace(/\\/$/, '') }}/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "name": "K2: extract items",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -540,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME",
+          "name": "K2 API key (Authorization: Bearer …)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// n8n Code node — \"Parse K2 JSON\"\n// Mode: Run Once for Each Item\n// Takes the chat-completions response and returns the parsed JSON object the model produced.\n\nconst res = $input.item.json;\nconst content = (((res.choices || [])[0] || {}).message || {}).content || '';\nconst cleaned = content.replace(/^\\s*```(?:json)?/i, '').replace(/```\\s*$/, '').trim();\nlet parsed;\ntry { parsed = JSON.parse(cleaned); } catch (e) { throw new Error('K2 did not return valid JSON: ' + cleaned.slice(0, 200)); }\nreturn { json: parsed };\n"
+      },
+      "name": "Parse K2 JSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -320,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// n8n Code node — \"Shelf life & eat-by dates\"\n// Mode: Run Once for All Items\n// Input: parsed K2 extraction { retailer, purchase_date, items[] }\n// Output: { today, retailer, purchaseDate, items: [{ id, name, canonical, category, price, purchaseDate, storage, eatBy, daysLeft, freezerDays, staple, confidence }] }\n//\n// Abridged USDA FoodKeeper table: id -> [emoji, category, defaultStorage, pantryDays, fridgeDays, freezerDays, staple]\nconst FOODKEEPER = {\"spinach\":[\"🥬\",\"produce\",\"fridge\",null,5,300,0],\"lettuce\":[\"🥬\",\"produce\",\"fridge\",null,7,null,0],\"kale\":[\"🥬\",\"produce\",\"fridge\",null,6,300,0],\"strawberries\":[\"🍓\",\"produce\",\"fridge\",1,3,240,0],\"blueberries\":[\"🫐\",\"produce\",\"fridge\",null,10,240,0],\"raspberries\":[\"🍓\",\"produce\",\"fridge\",null,3,240,0],\"grapes\":[\"🍇\",\"produce\",\"fridge\",null,7,240,0],\"bananas\":[\"🍌\",\"produce\",\"pantry\",4,7,60,0],\"apples\":[\"🍎\",\"produce\",\"fridge\",21,45,null,0],\"avocados\":[\"🥑\",\"produce\",\"pantry\",4,5,null,0],\"tomatoes\":[\"🍅\",\"produce\",\"pantry\",5,7,null,0],\"cucumbers\":[\"🥒\",\"produce\",\"fridge\",null,7,null,0],\"bell_pepper\":[\"🫑\",\"produce\",\"fridge\",null,8,240,0],\"broccoli\":[\"🥦\",\"produce\",\"fridge\",null,5,300,0],\"carrots\":[\"🥕\",\"produce\",\"fridge\",null,21,300,0],\"onions\":[\"🧅\",\"produce\",\"pantry\",30,60,null,0],\"garlic\":[\"🧄\",\"produce\",\"pantry\",30,60,null,1],\"potatoes\":[\"🥔\",\"produce\",\"pantry\",30,60,null,0],\"sweet_potatoes\":[\"🍠\",\"produce\",\"pantry\",21,null,null,0],\"mushrooms\":[\"🍄\",\"produce\",\"fridge\",null,5,240,0],\"zucchini\":[\"🥒\",\"produce\",\"fridge\",null,5,null,0],\"asparagus\":[\"🌱\",\"produce\",\"fridge\",null,4,240,0],\"green_beans\":[\"🫛\",\"produce\",\"fridge\",null,5,240,0],\"lemons\":[\"🍋\",\"produce\",\"fridge\",7,21,null,0],\"limes\":[\"🍋\",\"produce\",\"fridge\",7,21,null,0],\"cilantro\":[\"🌿\",\"produce\",\"fridge\",null,5,null,0],\"basil\":[\"🌿\",\"produce\",\"fridge\",3,3,null,0],\"ginger\":[\"🫚\",\"produce\",\"fridge\",null,21,180,0],\"corn\":[\"🌽\",\"produce\",\"fridge\",null,2,240,0],\"celery\":[\"🥬\",\"produce\",\"fridge\",null,14,null,0],\"cauliflower\":[\"🥦\",\"produce\",\"fridge\",null,7,240,0],\"mango\":[\"🥭\",\"produce\",\"pantry\",4,5,240,0],\"oranges\":[\"🍊\",\"produce\",\"fridge\",7,21,null,0],\"cabbage\":[\"🥬\",\"produce\",\"fridge\",null,14,null,0],\"salad_kit\":[\"🥗\",\"produce\",\"fridge\",null,4,null,0],\"milk\":[\"🥛\",\"dairy\",\"fridge\",null,7,90,0],\"oat_milk\":[\"🥛\",\"dairy\",\"fridge\",180,10,null,0],\"eggs\":[\"🥚\",\"eggs\",\"fridge\",null,35,null,0],\"butter\":[\"🧈\",\"dairy\",\"fridge\",null,60,270,1],\"cheddar\":[\"🧀\",\"dairy\",\"fridge\",null,180,180,0],\"mozzarella\":[\"🧀\",\"dairy\",\"fridge\",null,7,null,0],\"parmesan\":[\"🧀\",\"dairy\",\"fridge\",null,180,null,0],\"yogurt\":[\"🥣\",\"dairy\",\"fridge\",null,14,60,0],\"cream_cheese\":[\"🧀\",\"dairy\",\"fridge\",null,30,null,0],\"sour_cream\":[\"🥣\",\"dairy\",\"fridge\",null,21,null,0],\"heavy_cream\":[\"🥛\",\"dairy\",\"fridge\",null,10,120,0],\"chicken_breast\":[\"🐔\",\"meat\",\"fridge\",null,2,270,0],\"chicken_thighs\":[\"🍗\",\"meat\",\"fridge\",null,2,270,0],\"ground_beef\":[\"🥩\",\"meat\",\"fridge\",null,2,120,0],\"steak\":[\"🥩\",\"meat\",\"fridge\",null,4,240,0],\"pork_chops\":[\"🍖\",\"meat\",\"fridge\",null,4,150,0],\"bacon\":[\"🥓\",\"meat\",\"fridge\",null,14,30,0],\"sausage\":[\"🌭\",\"meat\",\"fridge\",null,2,60,0],\"deli_turkey\":[\"🥪\",\"deli\",\"fridge\",null,14,60,0],\"salmon\":[\"🐟\",\"seafood\",\"fridge\",null,2,90,0],\"shrimp\":[\"🦐\",\"seafood\",\"fridge\",null,2,180,0],\"tofu\":[\"🧊\",\"deli\",\"fridge\",null,30,150,0],\"bread\":[\"🍞\",\"bakery\",\"pantry\",5,14,90,0],\"tortillas\":[\"🫓\",\"bakery\",\"pantry\",7,30,180,0],\"bagels\":[\"🥯\",\"bakery\",\"pantry\",5,7,90,0],\"hummus\":[\"🥣\",\"deli\",\"fridge\",null,30,null,0],\"salsa\":[\"🥣\",\"deli\",\"fridge\",null,7,null,0],\"guacamole\":[\"🥑\",\"deli\",\"fridge\",null,2,null,0],\"fresh_pasta\":[\"🍝\",\"deli\",\"fridge\",null,3,60,0],\"orange_juice\":[\"🧃\",\"beverage\",\"fridge\",null,14,null,0],\"frozen_peas\":[\"🫛\",\"frozen\",\"freezer\",null,null,240,0],\"frozen_berries\":[\"🫐\",\"frozen\",\"freezer\",null,null,240,0],\"ice_cream\":[\"🍨\",\"frozen\",\"freezer\",null,null,90,0],\"frozen_pizza\":[\"🍕\",\"frozen\",\"freezer\",null,null,90,0],\"rice\":[\"🍚\",\"pantry\",\"pantry\",730,null,null,1],\"pasta\":[\"🍝\",\"pantry\",\"pantry\",730,null,null,1],\"olive_oil\":[\"🫒\",\"pantry\",\"pantry\",365,null,null,1],\"canned_beans\":[\"🥫\",\"pantry\",\"pantry\",730,null,null,1],\"canned_tomatoes\":[\"🥫\",\"pantry\",\"pantry\",540,null,null,1],\"oats\":[\"🌾\",\"pantry\",\"pantry\",365,null,null,1],\"flour\":[\"🌾\",\"pantry\",\"pantry\",240,null,null,1],\"sugar\":[\"🍬\",\"pantry\",\"pantry\",730,null,null,1],\"peanut_butter\":[\"🥜\",\"pantry\",\"pantry\",180,null,null,1],\"cereal\":[\"🥣\",\"pantry\",\"pantry\",180,null,null,1],\"coffee\":[\"☕\",\"pantry\",\"pantry\",180,null,null,1],\"chips\":[\"🍿\",\"pantry\",\"pantry\",60,null,null,1],\"soy_sauce\":[\"🍶\",\"pantry\",\"pantry\",365,null,null,1],\"stock\":[\"🥫\",\"pantry\",\"pantry\",365,null,null,1],\"spices\":[\"🧂\",\"pantry\",\"pantry\",730,null,null,1],\"quinoa\":[\"🌾\",\"pantry\",\"pantry\",365,null,null,1],\"honey\":[\"🍯\",\"pantry\",\"pantry\",730,null,null,1],\"coconut_milk\":[\"🥥\",\"pantry\",\"pantry\",730,null,null,1],\"sparkling_water\":[\"🫧\",\"beverage\",\"pantry\",365,null,null,1]};\n// category -> [emoji, defaultStorage, pantryDays, fridgeDays, freezerDays]\nconst CATEGORY_DEFAULTS = {\"produce\":[\"🥗\",\"fridge\",null,7,240],\"dairy\":[\"🥛\",\"fridge\",null,10,90],\"eggs\":[\"🥚\",\"fridge\",null,35,null],\"meat\":[\"🥩\",\"fridge\",null,2,180],\"seafood\":[\"🐟\",\"fridge\",null,2,90],\"bakery\":[\"🍞\",\"pantry\",5,14,90],\"deli\":[\"🥪\",\"fridge\",null,5,60],\"beverage\":[\"🧃\",\"fridge\",180,7,null],\"frozen\":[\"🧊\",\"freezer\",null,null,180],\"pantry\":[\"🥫\",\"pantry\",365,null,null]};\nconst ESTIMATED_PRICE = { produce: 2.99, dairy: 4.49, eggs: 4.79, meat: 8.99, seafood: 11.99, bakery: 4.49, deli: 5.49, beverage: 3.99, frozen: 5.99, pantry: 3.49 };\n\nconst input = $input.first().json;\nconst today = new Date().toISOString().slice(0, 10);\nconst purchaseDate = /^\\d{4}-\\d{2}-\\d{2}$/.test(input.purchase_date || '') ? input.purchase_date : today;\nconst addDays = (iso, n) => { const d = new Date(iso + 'T00:00:00'); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };\nconst between = (a, b) => Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 86400000);\n\nconst items = (input.items || []).map((raw, i) => {\n  const entry = raw.canonical && FOODKEEPER[raw.canonical] ? FOODKEEPER[raw.canonical] : null;\n  const category = entry ? entry[1] : (CATEGORY_DEFAULTS[raw.category] ? raw.category : 'produce');\n  const cd = CATEGORY_DEFAULTS[category];\n  const storage = entry ? entry[2] : cd[1];\n  const life = { pantry: entry ? entry[3] : cd[2], fridge: entry ? entry[4] : cd[3], freezer: entry ? entry[5] : cd[4] };\n  const days = life[storage] ?? life.fridge ?? life.pantry ?? null;\n  const eatBy = days == null ? null : addDays(purchaseDate, days);\n  return {\n    id: 'i' + i,\n    name: raw.name || raw.raw_line,\n    rawLine: raw.raw_line,\n    canonical: entry ? raw.canonical : 'unknown',\n    emoji: entry ? entry[0] : cd[0],\n    category,\n    quantity: Number(raw.quantity) || 1,\n    unit: raw.unit || null,\n    price: Number(raw.price) > 0 ? Number(raw.price) : ESTIMATED_PRICE[category],\n    purchaseDate,\n    storage,\n    shelfLife: life,\n    freezerDays: life.freezer,\n    eatBy,\n    daysLeft: eatBy ? between(today, eatBy) : null,\n    staple: entry ? entry[6] === 1 : false,\n    confidence: Number(raw.confidence) || 0,\n    needsConfirm: (Number(raw.confidence) || 0) < 0.7,\n  };\n});\n\nreturn [{ json: { today, retailer: input.retailer || null, purchaseDate, items } }];\n"
+      },
+      "name": "Shelf life & eat-by dates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -100,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// n8n Code node — \"Build K2 dinners request\"\n// Mode: Run Once for All Items\n// Input: output of \"Shelf life & eat-by dates\". Output: same payload plus { body } for the HTTP Request node.\n\nconst PROMPT = \"You are a pragmatic home cook. Propose THREE different weeknight dinners that use up what is already in this kitchen, prioritising the items closest to their eat-by date.\\n\\nINVENTORY (canonical id: name — deadline (value)):\\n{{INVENTORY_LINES}}\\n\\nFREE PANTRY STAPLES you may assume: salt, black pepper, olive oil, garlic, butter, rice, pasta, flour, sugar, soy sauce, vinegar, canned tomatoes, chicken stock, dried spices, honey.\\n\\nHard rules:\\n- Every non-staple ingredient MUST be one of the canonical ids in the inventory above. Do not invent ingredients (no saffron, no ingredients \\\"you probably have\\\").\\n- Each dinner should use at least two inventory items, favouring the soonest-expiring and most expensive ones.\\n- 15–40 minutes, 2–4 servings, real technique, no fluff.\\n\\nReturn ONLY JSON:\\n{\\n  \\\"dinners\\\": [\\n    {\\n      \\\"id\\\": string,                       // kebab-case slug\\n      \\\"title\\\": string,\\n      \\\"emoji\\\": string,                    // one emoji\\n      \\\"minutes\\\": number,\\n      \\\"servings\\\": number,\\n      \\\"ingredients\\\": [ { \\\"foodId\\\": string, \\\"key\\\": boolean, \\\"optional\\\": boolean } ],\\n      \\\"staples\\\": string[],                // subset of the free staples list\\n      \\\"steps\\\": string[]                   // 2–4 terse steps\\n    }\\n  ]\\n}\";\n\nconst data = $input.first().json;\nconst lines = data.items\n  .filter((it) => !it.staple && it.canonical !== 'unknown')\n  .sort((a, b) => (a.daysLeft ?? 99) - (b.daysLeft ?? 99))\n  .map((it) => `- ${it.canonical}: ${it.name} — ${it.daysLeft == null ? 'no deadline' : it.daysLeft <= 0 ? 'eat TODAY' : it.daysLeft + ' days left'} ($${it.price.toFixed(2)})`)\n  .join('\\n');\n\nreturn [{\n  json: {\n    ...data,\n    body: {\n      model: $env.K2_MODEL || 'kimi-k2-0905-preview',\n      temperature: 0.4,\n      max_tokens: 2500,\n      response_format: { type: 'json_object' },\n      messages: [\n        { role: 'system', content: 'You return strictly valid JSON and nothing else.' },\n        { role: 'user', content: PROMPT.replace('{{INVENTORY_LINES}}', lines) },\n      ],\n    },\n  },\n}];\n"
+      },
+      "name": "Build K2 dinners request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        120,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.K2_BASE_URL || 'https://api.moonshot.ai/v1').replace(/\\/$/, '') }}/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "name": "K2: three dinners",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        340,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME",
+          "name": "K2 API key (Authorization: Bearer …)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// n8n Code node — \"Parse K2 dinners\"\n// Mode: Run Once for All Items\n// Combines the K2 dinners response with the dated inventory from \"Build K2 dinners request\".\n\nconst res = $input.first().json;\nconst content = (((res.choices || [])[0] || {}).message || {}).content || '';\nconst cleaned = content.replace(/^\\s*```(?:json)?/i, '').replace(/```\\s*$/, '').trim();\nlet parsed = { dinners: [] };\ntry { parsed = JSON.parse(cleaned); } catch (e) { /* scheduler falls back to freeze-or-eat decisions only */ }\n\nconst upstream = $('Build K2 dinners request').first().json;\nreturn [{ json: { today: upstream.today, retailer: upstream.retailer, items: upstream.items, dinners: parsed.dinners || [] } }];\n"
+      },
+      "name": "Parse K2 dinners",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// n8n Code node — \"Dollar-optimising scheduler\"\n// Mode: Run Once for All Items\n//\n// Input (from \"Parse K2 dinners\"): { items: [...dated items from \"Shelf life & eat-by dates\"], dinners: [...K2 dinners] }\n// Output: one item { plan, decisions, summary, calendar, email } ready for Google Calendar + Gmail.\n//\n// Objective: one dinner per night for HORIZON nights, never use an item after its eat-by, maximise the\n// dollar value of at-risk food eaten before it expires. Exact DP over (night, set of rescued items).\n\nconst HORIZON = 7;\nconst GROUNDING_THRESHOLD = 0.8;\nconst MAX_TRACKED = 16;\nconst STAPLES = new Set(['salt', 'black pepper', 'olive oil', 'garlic', 'butter', 'rice', 'pasta', 'flour', 'sugar', 'soy sauce', 'vinegar', 'canned tomatoes', 'chicken stock', 'dried spices', 'honey']);\n\nconst input = $input.first().json;\nconst items = input.items || [];\nconst dinners = (input.dinners || []).filter((d) => d && d.title && Array.isArray(d.ingredients));\nconst today = input.today || new Date().toISOString().slice(0, 10);\n\nconst addDays = (iso, n) => { const d = new Date(iso + 'T00:00:00'); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };\nconst money = (n) => '$' + n.toFixed(2);\nconst nice = (iso) => new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });\n\n// ---- grounding: verify every dinner against what is actually in the kitchen on night d ----\nfunction ground(dinner, day) {\n  const staples = (dinner.staples || []).filter((s) => STAPLES.has(s));\n  let owned = staples.length, total = staples.length, keyMissing = false;\n  const used = [], missing = [];\n  for (const ing of dinner.ingredients) {\n    const hits = items.filter((it) => it.canonical === ing.foodId && (it.daysLeft == null || it.daysLeft >= day));\n    if (hits.length) { owned++; total++; hits.forEach((h) => used.push(h.id)); }\n    else if (!ing.optional) { total++; missing.push(ing.foodId); if (ing.key) keyMissing = true; }\n  }\n  const score = total ? owned / total : 0;\n  return { score, owned, total, missing, used, passes: !keyMissing && score >= GROUNDING_THRESHOLD };\n}\n\n// ---- at-risk items: perishable, not yet expired, expiring inside the horizon ----\nconst atRisk = items\n  .filter((it) => !it.staple && it.daysLeft != null && it.daysLeft >= 0 && it.daysLeft < HORIZON)\n  .sort((a, b) => b.price - a.price);\nconst tracked = atRisk.slice(0, MAX_TRACKED);\nconst bit = new Map(tracked.map((it, i) => [it.id, i]));\nconst value = (mask) => tracked.reduce((s, it, i) => (mask & (1 << i) ? s + it.price : s), 0);\n\nconst feasible = [];\nfor (let d = 0; d < HORIZON; d++) {\n  feasible.push(dinners.map((dinner) => {\n    const g = ground(dinner, d);\n    if (!g.passes) return null;\n    let mask = 0; const rescued = [];\n    for (const id of g.used) if (bit.has(id)) { mask |= 1 << bit.get(id); rescued.push(id); }\n    return { dinner, g, mask, rescued };\n  }).filter(Boolean));\n}\n\n// ---- exact DP: layers[d] = Map(mask -> {value, prev, choice}) ----\nconst layers = [new Map([[0, { value: 0, prev: 0, choice: null }]])];\nfor (let d = 0; d < HORIZON; d++) {\n  const next = new Map();\n  for (const [mask, st] of layers[d]) {\n    if (!next.has(mask) || next.get(mask).value < st.value) next.set(mask, { value: st.value, prev: mask, choice: null });\n    for (const f of feasible[d]) {\n      const gain = f.mask & ~mask;\n      if (!gain) continue;\n      const nm = mask | f.mask, v = st.value + value(gain);\n      if (!next.has(nm) || next.get(nm).value < v) next.set(nm, { value: v, prev: mask, choice: f });\n    }\n  }\n  layers.push(next);\n}\nlet best = 0, bestV = -1;\nfor (const [m, st] of layers[HORIZON]) if (st.value > bestV) { bestV = st.value; best = m; }\nconst choices = new Array(HORIZON).fill(null);\nfor (let d = HORIZON, m = best; d > 0; d--) { const st = layers[d].get(m); choices[d - 1] = st.choice; m = st.prev; }\n\n// zero-gain nights still get a grounded dinner, for variety\nconst usedTitles = new Set(choices.filter(Boolean).map((c) => c.dinner.title));\nfor (let d = 0; d < HORIZON; d++) {\n  if (choices[d]) continue;\n  const c = feasible[d].filter((f) => !usedTitles.has(f.dinner.title)).sort((a, b) => b.g.used.length - a.g.used.length || b.g.score - a.g.score)[0];\n  if (c) { choices[d] = c; usedTitles.add(c.dinner.title); }\n}\n\n// ---- assemble plan, freeze-or-eat decisions, before/after numbers ----\nconst covered = new Set();\nconst plan = choices.map((c, d) => {\n  const date = addDays(today, d);\n  if (!c) return { day: d, date, title: null };\n  const rescued = c.rescued.filter((id) => !covered.has(id));\n  rescued.forEach((id) => covered.add(id));\n  const saved = rescued.reduce((s, id) => s + (atRisk.find((it) => it.id === id) || { price: 0 }).price, 0);\n  return { day: d, date, title: c.dinner.title, emoji: c.dinner.emoji || '🍽️', minutes: c.dinner.minutes, steps: c.dinner.steps || [],\n    grounding: `Uses ${c.g.owned} of ${c.g.total} ingredients you own`, saved, rescues: rescued.map((id) => items.find((it) => it.id === id).name) };\n});\n\nconst decisions = []; let frozen = 0, wasted = 0;\nfor (const it of atRisk) {\n  if (covered.has(it.id)) continue;\n  if (it.freezerDays && it.storage !== 'freezer') { decisions.push({ kind: 'freeze', item: it.name, by: it.eatBy, goodUntil: addDays(today, it.freezerDays), value: it.price }); frozen += it.price; }\n  else { decisions.push({ kind: 'eat-now', item: it.name, by: it.eatBy, value: it.price }); wasted += it.price; }\n}\nconst atRiskValue = atRisk.reduce((s, it) => s + it.price, 0);\nconst eaten = atRisk.filter((it) => covered.has(it.id)).reduce((s, it) => s + it.price, 0);\n\n// \"no plan\" baseline: cook whatever comes first in the list, deadlines ignored, no repeats\nconst naiveCovered = new Set(); const naiveUsed = new Set();\nfor (let d = 0; d < HORIZON; d++) { const f = feasible[d].find((x) => !naiveUsed.has(x.dinner.title)); if (f) { naiveUsed.add(f.dinner.title); f.rescued.forEach((id) => naiveCovered.add(id)); } }\nconst wastedNoPlan = atRisk.filter((it) => !naiveCovered.has(it.id)).reduce((s, it) => s + it.price, 0);\n\nconst summary = { atRiskValue, eaten, frozen, wasted, wastedNoPlan, headline: `Without a plan: ${money(wastedNoPlan)} of this receipt goes in the bin. With Dining Car: ${money(wasted)}.` };\n\n// ---- rows for Google Calendar (one eat-by alarm per perishable, one dinner event per night) ----\nconst calendar = [];\nfor (const it of items) if (!it.staple && it.eatBy && it.daysLeft >= 0) calendar.push({ kind: 'eat-by', title: `${it.emoji || '🥬'} ${it.name} — eat by`, date: it.eatBy, allDay: true, description: `Bought ${it.purchaseDate} for ${money(it.price)}. Stored in the ${it.storage}. Source: USDA FoodKeeper.` });\nfor (const n of plan) if (n.title) calendar.push({ kind: 'dinner', title: `${n.emoji} ${n.day === 0 ? 'Tonight' : 'Dinner'}: ${n.title}`, date: n.date, allDay: false, start: `${n.date}T18:30:00`, end: `${n.date}T19:30:00`, description: n.steps.join('\\n') });\nfor (const dec of decisions) if (dec.kind === 'freeze') calendar.push({ kind: 'freeze', title: `🧊 Freeze the ${dec.item.toLowerCase()} today`, date: dec.by, allDay: true, description: `Frozen, it keeps until ${dec.goodUntil}.` });\n\n// ---- summary email ----\nconst soon = items.filter((it) => !it.staple && it.daysLeft != null && it.daysLeft >= 0 && it.daysLeft < 7);\nconst tonight = plan[0];\nconst email = {\n  subject: `${soon.length} items expire this week — tonight: ${tonight.title || 'nothing urgent'}`,\n  text: [\n    summary.headline, '',\n    `Tonight: ${tonight.emoji || ''} ${tonight.title || '—'}${tonight.rescues && tonight.rescues.length ? ` (rescues ${money(tonight.saved)}: ${tonight.rescues.join(', ')})` : ''}`,\n    tonight.grounding ? `  ${tonight.grounding}` : '', '',\n    'Expiring this week:',\n    ...soon.sort((a, b) => a.daysLeft - b.daysLeft).map((it) => `  ${it.emoji || '•'} ${it.name} — eat by ${nice(it.eatBy)} (${money(it.price)})`), '',\n    ...(decisions.length ? ['Decisions:', ...decisions.map((d) => d.kind === 'freeze' ? `  🧊 Freeze the ${d.item.toLowerCase()} by ${nice(d.by)} — good until ${nice(d.goodUntil)}` : `  ⚠️ Eat the ${d.item.toLowerCase()} by ${nice(d.by)} or it's ${money(d.value)} in the bin`), ''] : []),\n    'Rest of the week:',\n    ...plan.slice(1).filter((n) => n.title).map((n) => `  ${nice(n.date)}: ${n.emoji} ${n.title}`),\n  ].join('\\n'),\n};\n\nreturn [{ json: { today, plan, decisions, summary, calendar, email } }];\n"
+      },
+      "name": "Dollar-optimising scheduler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "calendar",
+        "options": {}
+      },
+      "name": "One row per calendar event",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "mode": "list",
+          "value": "primary"
+        },
+        "start": "={{ $json.allDay ? $json.date : $json.start }}",
+        "end": "={{ $json.allDay ? $json.date : $json.end }}",
+        "additionalFields": {
+          "allday": "={{ $json.allDay ? 'yes' : 'no' }}",
+          "summary": "={{ $json.title }}",
+          "description": "={{ $json.description }}",
+          "color": "={{ $json.kind === 'eat-by' ? '11' : $json.kind === 'freeze' ? '9' : '2' }}"
+        }
+      },
+      "name": "Google Calendar: eat-by alarm / dinner",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        1220,
+        -160
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "REPLACE_ME",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Gmail Trigger').item.json.to?.value?.[0]?.address || $('Gmail Trigger').first().json.to }}",
+        "subject": "={{ $json.email.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.email.text }}",
+        "options": {}
+      },
+      "name": "Gmail: weekly summary",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1000,
+        160
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_ME",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Gmail Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare receipt text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare receipt text": {
+      "main": [
+        [
+          {
+            "node": "Build K2 extraction request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build K2 extraction request": {
+      "main": [
+        [
+          {
+            "node": "K2: extract items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "K2: extract items": {
+      "main": [
+        [
+          {
+            "node": "Parse K2 JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse K2 JSON": {
+      "main": [
+        [
+          {
+            "node": "Shelf life & eat-by dates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shelf life & eat-by dates": {
+      "main": [
+        [
+          {
+            "node": "Build K2 dinners request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build K2 dinners request": {
+      "main": [
+        [
+          {
+            "node": "K2: three dinners",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "K2: three dinners": {
+      "main": [
+        [
+          {
+            "node": "Parse K2 dinners",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse K2 dinners": {
+      "main": [
+        [
+          {
+            "node": "Dollar-optimising scheduler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dollar-optimising scheduler": {
+      "main": [
+        [
+          {
+            "node": "One row per calendar event",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Gmail: weekly summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One row per calendar event": {
+      "main": [
+        [
+          {
+            "node": "Google Calendar: eat-by alarm / dinner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}
