@@ -12,29 +12,6 @@ function AnimatedMoney({ value, prefix = "", className = "" }: { value: number; 
   );
 }
 
-const CELEBRATION_EMOJI = ["🎉", "✨", "🙌", "🎊", "💰"];
-
-/** A small, earned payoff: only fires when there was real money at risk and none of it went to waste. */
-function CelebrationBurst() {
-  return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
-      {CELEBRATION_EMOJI.map((emoji, i) => (
-        <span
-          key={i}
-          className="animate-rotate-in absolute text-2xl"
-          style={{
-            top: `${10 + (i % 3) * 25}%`,
-            left: `${8 + i * 20}%`,
-            animationDelay: `${i * 120}ms`,
-          }}
-        >
-          {emoji}
-        </span>
-      ))}
-    </div>
-  );
-}
-
 function Stat({ label, value, color }: { label: string; value: number; color: string }) {
   const animated = useAnimatedNumber(value);
   return (
@@ -56,7 +33,6 @@ export function Headline({ plan, retailer, lifetimeSaved }: { plan: Plan; retail
     <div className="animate-float-in relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-card via-card to-primary/10 p-6 shadow-2xl md:p-8">
       {/* Shimmer overlay */}
       <div className="animate-shimmer pointer-events-none absolute inset-0 rounded-2xl" />
-      {plan.atRiskValue > 0 && plan.wasted === 0 && <CelebrationBurst />}
 
       <div className="relative z-10 space-y-6">
         {/* Label */}
