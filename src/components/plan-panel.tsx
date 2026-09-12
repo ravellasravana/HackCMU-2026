@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Clock, Users, ShieldCheck, Snowflake, Sparkles, ChevronDown, ChefHat } from "lucide-react";
+import { Clock, Users, ShieldCheck, Snowflake, Sparkles, ChevronDown, ChefHat, Volume2, Loader2 } from "lucide-react";
 import { formatLongDate, formatMoney, formatRelativeDay, formatShortDate } from "@/lib/dates";
 import type { DatedItem, NightPlan, Plan } from "@/lib/scheduler";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,6 +27,54 @@ function GroundingBadge({ night }: { night: NightPlan }) {
       <ShieldCheck className="size-3.5" />
       Uses {owned} of {total} ingredients you own ({pct}% grounded)
     </div>
+  );
+}
+
+/** Reads the plan aloud via ElevenLabs (server-proxied — see /api/speak). */
+function SpeakButton({ text }: { text: string }) {
+  const [state, setState] = useState<"idle" | "loading" | "playing" | "error">("idle");
+
+  async function speak() {
+    if (state === "loading" || state === "playing") return;
+    setState("loading");
+    try {
+      const res = await fetch("/api/speak", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}) as { error?: string });
+        throw new Error(data.error ?? `Speech request failed (${res.status})`);
+      }
+      const url = URL.createObjectURL(await res.blob());
+      const audio = new Audio(url);
+      audio.onended = () => {
+        setState("idle");
+        URL.revokeObjectURL(url);
+      };
+      audio.onerror = () => {
+        setState("error");
+        URL.revokeObjectURL(url);
+      };
+      setState("playing");
+      await audio.play();
+    } catch {
+      setState("error");
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={speak}
+      disabled={state === "loading" || state === "playing"}
+      title="Read tonight's plan aloud"
+      className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground disabled:opacity-60"
+    >
+      {state === "loading" ? <Loader2 className="size-3 animate-spin" /> : <Volume2 className="size-3" />}
+      {state === "error" ? "Voice unavailable" : state === "playing" ? "Playing…" : "Read aloud"}
+    </button>
   );
 }
 
@@ -58,12 +106,17 @@ function TonightCard({ night, items }: { night: NightPlan; items: DatedItem[] })
             <ChefHat className="size-3" />
             Tonight · {formatShortDate(night.date)}
           </div>
-          {night.recipe.source === "k2" && (
-            <Badge variant="secondary" className="gap-1 text-xs font-normal">
-              <Sparkles className="size-3 text-primary" />
-              IFM K2 recipe
-            </Badge>
-          )}
+          <div className="flex items-center gap-2">
+            {night.recipe.source !== "library" && (
+              <Badge variant="secondary" className="gap-1 text-xs font-normal">
+                <Sparkles className="size-3 text-primary" />
+                {night.recipe.source === "gemini" ? "Gemini recipe" : "IFM K2 recipe"}
+              </Badge>
+            )}
+            <SpeakButton
+              text={`Tonight: ${night.recipe.title}.${rescued.length ? ` This rescues ${formatMoney(night.valueSaved)} of food that would otherwise spoil.` : ""}`}
+            />
+          </div>
         </div>
 
         {/* Emoji + Title */}

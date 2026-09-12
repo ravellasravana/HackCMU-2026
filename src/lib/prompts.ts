@@ -1,4 +1,5 @@
 import { FOODKEEPER, KITCHEN_STAPLES } from "./foodkeeper";
+import type { DietPrefs } from "./types";
 
 /** K2 prompt #1 — receipt → normalized items with confidence. Also shipped in n8n/prompts. */
 export function extractionPrompt(receiptText: string): string {
@@ -45,8 +46,16 @@ export interface DinnerPromptItem {
   price: number;
 }
 
+function dietRules(diet?: DietPrefs): string {
+  if (!diet) return "";
+  const lines: string[] = [];
+  if (diet.vegetarian) lines.push("- Vegetarian only: no meat and no seafood ingredients, in any dinner.");
+  if (diet.allergies.length) lines.push(`- Allergies, must not appear anywhere: ${diet.allergies.join(", ")}.`);
+  return lines.length ? `\n${lines.join("\n")}` : "";
+}
+
 /** K2 prompt #2 — three dinners constrained to what is actually in the kitchen. */
-export function dinnersPrompt(items: DinnerPromptItem[], rejectedFeedback?: string): string {
+export function dinnersPrompt(items: DinnerPromptItem[], rejectedFeedback?: string, diet?: DietPrefs): string {
   const inventory = items
     .map((i) => `- ${i.foodId}: ${i.name} — ${i.daysLeft === null ? "no deadline" : i.daysLeft <= 0 ? "eat TODAY" : `${i.daysLeft} days left`} ($${i.price.toFixed(2)})`)
     .join("\n");
@@ -60,7 +69,7 @@ FREE PANTRY STAPLES you may assume: ${KITCHEN_STAPLES.join(", ")}.
 Hard rules:
 - Every non-staple ingredient MUST be one of the canonical ids in the inventory above. Do not invent ingredients (no saffron, no ingredients "you probably have").
 - Each dinner should use at least two inventory items, favouring the soonest-expiring and most expensive ones.
-- 15–40 minutes, 2–4 servings, real technique, no fluff.
+- 15–40 minutes, 2–4 servings, real technique, no fluff.${dietRules(diet)}
 ${rejectedFeedback ? `\nYour previous answer was rejected by the grounding checker: ${rejectedFeedback}\nFix it.\n` : ""}
 Return ONLY JSON:
 {

@@ -72,7 +72,7 @@ export interface Recipe {
   steps: string[];
   /** Lower = what people tend to cook first when they have no plan. */
   popularity: number;
-  source: "library" | "k2";
+  source: "library" | "k2" | "gemini";
 }
 
 export interface ExtractedLine {
@@ -84,4 +84,10 @@ export interface ExtractedLine {
   price: number;
   confidence: number;
   category?: Category;
+}
+
+export interface DietPrefs {
+  vegetarian: boolean;
+  /** Free-typed keywords, e.g. "peanuts", "shellfish". Matched against food names/aliases. */
+  allergies: string[];
 }

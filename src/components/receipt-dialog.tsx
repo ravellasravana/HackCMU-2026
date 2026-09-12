@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 export interface ExtractResult {
   lines: ExtractedLine[];
   meta: ReceiptMeta;
-  source: "k2" | "local";
+  source: "k2" | "gemini" | "local";
   warning?: string;
   fallbackDate: string;
 }

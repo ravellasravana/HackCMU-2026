@@ -2,26 +2,35 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  CalendarPlus, Mail, RotateCcw, Sparkles, Loader2, TrainFront,
+  CalendarPlus, Leaf, Mail, RotateCcw, Sparkles, Loader2, TrainFront,
   TrendingDown, Zap, ChevronRight,
 } from "lucide-react";
 import { addDays, todayISO } from "@/lib/dates";
 import { RECEIPT_PRESETS } from "@/lib/demo";
+import { filterRecipesByDiet } from "@/lib/diet";
 import { buildCalendar } from "@/lib/ics";
 import { lineToItem, manualItem, reassignFood } from "@/lib/inventory";
 import { parseReceipt } from "@/lib/normalize";
 import { RECIPES } from "@/lib/recipes";
 import { buildPlan, withDates, type DatedItem } from "@/lib/scheduler";
 import { EMPTY_STATE, loadPersisted, savePersisted, type Persisted } from "@/lib/store";
-import type { InventoryItem, Recipe, Storage } from "@/lib/types";
+import type { DietPrefs, FoodEntry, InventoryItem, Recipe, Storage } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AddItem } from "@/components/add-item";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DietDialog } from "@/components/diet-dialog";
+import { EditItemDialog } from "@/components/edit-item-dialog";
 import { FridgeTimeline } from "@/components/fridge-timeline";
 import { Headline } from "@/components/headline";
 import { PlanPanel } from "@/components/plan-panel";
 import { ReceiptDialog, type ExtractResult } from "@/components/receipt-dialog";
+
+function providerLabel(source: "k2" | "gemini" | "local"): string {
+  if (source === "k2") return "IFM K2";
+  if (source === "gemini") return "Gemini";
+  return "the local normalizer";
+}
 
 /* ---- tiny floating food particles for the empty state hero ---- */
 const PARTICLES = ["🥬", "🍓", "🐔", "🥛", "🐟", "🥑", "🍌", "🥩"];
@@ -129,6 +138,8 @@ export function DiningCar() {
   const [today, setToday] = useState(() => todayISO());
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [confirming, setConfirming] = useState<InventoryItem | null>(null);
+  const [editing, setEditing] = useState<InventoryItem | null>(null);
+  const [dietOpen, setDietOpen] = useState(false);
   const [k2Busy, setK2Busy] = useState(false);
   const [notice, setNotice] = useState<{ text: string; kind: "info" | "warn" } | null>(null);
 
@@ -137,7 +148,10 @@ export function DiningCar() {
     return () => window.clearInterval(tick);
   }, []);
 
-  const recipes = useMemo(() => [...state.k2Recipes, ...RECIPES], [state.k2Recipes]);
+  const recipes = useMemo(
+    () => filterRecipesByDiet([...state.k2Recipes, ...RECIPES], state.diet),
+    [state.k2Recipes, state.diet],
+  );
   const dated: DatedItem[] = useMemo(() => withDates(state.items, today), [state.items, today]);
   const plan = useMemo(() => buildPlan(state.items, recipes, today), [state.items, recipes, today]);
 
@@ -162,7 +176,7 @@ export function DiningCar() {
     }));
     const flagged = items.filter((i) => !i.confirmed).length;
     const msg =
-      `${items.length} items loaded${result.source === "k2" ? " by IFM K2" : " (local normalizer)"}` +
+      `${items.length} items loaded by ${providerLabel(result.source)}` +
       (flagged ? ` · ${flagged} low-confidence ${flagged === 1 ? "line" : "lines"} — tap the amber chip to confirm` : ".") +
       (result.warning ? ` ⚠️ ${result.warning}` : "");
     setNotice({ text: msg, kind: flagged > 0 ? "warn" : "info" });
@@ -200,27 +214,27 @@ export function DiningCar() {
       const res = await fetch("/api/dinners", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ items: state.items, today }),
+        body: JSON.stringify({ items: state.items, today, diet: state.diet }),
       });
       const data = (await res.json()) as {
         recipes?: Recipe[];
         rejected?: { title: string; reason: string }[];
-        source: string;
+        source: "k2" | "gemini" | "local";
         note?: string;
         error?: string;
       };
-      if (!res.ok) throw new Error(data.error ?? "K2 request failed");
+      if (!res.ok) throw new Error(data.error ?? "LLM request failed");
       if (data.recipes?.length) {
         setState((s) => ({ ...s, k2Recipes: data.recipes! }));
         const rejectedNote = data.rejected?.length
           ? ` Rejected ${data.rejected.length} ungrounded: ${data.rejected.map((r) => `${r.title} (${r.reason})`).join("; ")}.`
           : "";
         setNotice({
-          text: `IFM K2 proposed ${data.recipes.length} dinners that passed the grounding check.${rejectedNote}`,
+          text: `${providerLabel(data.source)} proposed ${data.recipes.length} dinners that passed the grounding check.${rejectedNote}`,
           kind: "info",
         });
       } else {
-        setNotice({ text: data.note ?? "K2 returned nothing usable — using the built-in recipe library.", kind: "warn" });
+        setNotice({ text: data.note ?? "The LLM returned nothing usable — using the built-in recipe library.", kind: "warn" });
       }
     } catch (err) {
       setNotice({ text: (err as Error).message, kind: "warn" });
@@ -230,7 +244,13 @@ export function DiningCar() {
   }
 
   function reset() {
-    setState(EMPTY_STATE);
+    const rescuedThisWeek = plan.savedByCooking + plan.savedByFreezing;
+    setState((s) => ({
+      ...EMPTY_STATE,
+      customFoods: s.customFoods,
+      diet: s.diet,
+      lifetimeSaved: s.lifetimeSaved + rescuedThisWeek,
+    }));
     setNotice(null);
   }
 
@@ -254,6 +274,15 @@ export function DiningCar() {
           <div className="flex flex-wrap items-center gap-1.5">
             <Button size="sm" onClick={() => setReceiptOpen(true)}>
               <Mail /> Paste receipt
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setDietOpen(true)}
+              title="Vegetarian / allergy preferences"
+              className={state.diet.vegetarian || state.diet.allergies.length ? "border-emerald-400/40 text-emerald-200" : undefined}
+            >
+              <Leaf /> Diet
             </Button>
             {hasItems && (
               <>
@@ -302,7 +331,7 @@ export function DiningCar() {
         <EmptyHero onDemo={loadDemo} onOpen={() => setReceiptOpen(true)} />
       ) : (
         <main className="flex flex-1 flex-col gap-6 px-4 py-6 md:px-8 md:py-8">
-          <Headline plan={plan} retailer={state.retailer} />
+          <Headline plan={plan} retailer={state.retailer} lifetimeSaved={state.lifetimeSaved} />
 
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)]">
             {/* Left: timeline */}
@@ -317,7 +346,7 @@ export function DiningCar() {
                   </Badge>
                   {state.lastSource && (
                     <Badge variant="outline" className="font-normal text-primary">
-                      read {state.lastSource === "k2" ? "by IFM K2" : "locally"}
+                      read {state.lastSource === "local" ? "locally" : `by ${providerLabel(state.lastSource)}`}
                     </Badge>
                   )}
                   {unconfirmed > 0 && (
@@ -343,6 +372,7 @@ export function DiningCar() {
                 onStorageChange={(id, storage: Storage) => updateItem(id, { storage })}
                 onConfirm={(item) => setConfirming(item)}
                 onRemove={(id) => setState((s) => ({ ...s, items: s.items.filter((it) => it.id !== id) }))}
+                onEdit={(item) => setEditing(item)}
               />
 
               <p className="px-1 text-[11px] text-muted-foreground">
@@ -374,6 +404,18 @@ export function DiningCar() {
           updateItem(itemId, (it) => reassignFood(it, foodId));
           setConfirming(null);
         }}
+        onCreateFood={(itemId, entry: FoodEntry) => {
+          setState((s) => ({ ...s, customFoods: [...s.customFoods, entry] }));
+          updateItem(itemId, (it) => reassignFood(it, entry.id));
+          setConfirming(null);
+        }}
+      />
+      <EditItemDialog item={editing} onClose={() => setEditing(null)} onSave={(id, patch) => updateItem(id, patch)} />
+      <DietDialog
+        open={dietOpen}
+        onOpenChange={setDietOpen}
+        diet={state.diet}
+        onSave={(diet: DietPrefs) => setState((s) => ({ ...s, diet }))}
       />
     </div>
   );
