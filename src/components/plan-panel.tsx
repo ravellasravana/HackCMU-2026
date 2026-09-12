@@ -70,10 +70,15 @@ function SpeakButton({ text }: { text: string }) {
       onClick={speak}
       disabled={state === "loading" || state === "playing"}
       title="Read tonight's plan aloud"
-      className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground disabled:opacity-60"
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-70",
+        state === "error"
+          ? "border-white/10 bg-white/5 text-muted-foreground"
+          : "animate-glow-pulse border-primary/40 bg-primary/15 text-primary hover:bg-primary/25",
+      )}
     >
-      {state === "loading" ? <Loader2 className="size-3 animate-spin" /> : <Volume2 className="size-3" />}
-      {state === "error" ? "Voice unavailable" : state === "playing" ? "Playing…" : "Read aloud"}
+      {state === "loading" ? <Loader2 className="size-3.5 animate-spin" /> : <Volume2 className="size-3.5" />}
+      {state === "error" ? "Voice unavailable" : state === "playing" ? "Playing…" : "🔊 Read it to me"}
     </button>
   );
 }

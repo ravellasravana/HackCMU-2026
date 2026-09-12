@@ -15,6 +15,7 @@ import { RECIPES } from "@/lib/recipes";
 import { buildPlan, withDates, type DatedItem } from "@/lib/scheduler";
 import { EMPTY_STATE, loadPersisted, savePersisted, type Persisted } from "@/lib/store";
 import type { DietPrefs, FoodEntry, InventoryItem, Recipe, Storage } from "@/lib/types";
+import { useAnimatedNumber } from "@/hooks/useAnimatedNumber";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AddItem } from "@/components/add-item";
@@ -84,18 +85,22 @@ function EmptyHero({ onDemo, onOpen }: { onDemo: () => void; onOpen: () => void 
 
         {/* Stats row */}
         <div className="flex flex-wrap justify-center gap-4 py-2">
-          {[
-            { icon: TrendingDown, label: "Average annual food waste per US household", value: "$1,800" },
-            { icon: Zap, label: "Optimised with IFM K2-Horizon-375B", value: "AI-powered" },
-          ].map(({ icon: Icon, label, value }) => (
-            <div key={label} className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5">
-              <Icon className="size-4 text-primary" />
-              <div className="text-left">
-                <div className="text-sm font-bold text-foreground">{value}</div>
-                <div className="max-w-[14rem] text-[11px] leading-tight text-muted-foreground">{label}</div>
+          <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5">
+            <TrendingDown className="size-4 text-primary" />
+            <div className="text-left">
+              <div className="font-mono text-sm font-bold tabular-nums text-foreground">
+                ${Math.round(useAnimatedNumber(1800, 1600)).toLocaleString()}
               </div>
+              <div className="max-w-[14rem] text-[11px] leading-tight text-muted-foreground">Average annual food waste per US household</div>
             </div>
-          ))}
+          </div>
+          <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5">
+            <Zap className="size-4 text-primary" />
+            <div className="text-left">
+              <div className="text-sm font-bold text-foreground">AI-powered</div>
+              <div className="max-w-[14rem] text-[11px] leading-tight text-muted-foreground">Optimised with IFM K2-Horizon-375B</div>
+            </div>
+          </div>
         </div>
 
         {/* CTAs */}
