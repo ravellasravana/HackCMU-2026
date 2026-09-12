@@ -4,7 +4,7 @@ export interface Persisted {
   items: InventoryItem[];
   k2Recipes: Recipe[];
   retailer: string | null;
-  lastSource: "k2" | "local" | "voice" | "photo" | null;
+  lastSource: "k2" | "local" | "voice" | null;
 }
 
 export const EMPTY_STATE: Persisted = { items: [], k2Recipes: [], retailer: null, lastSource: null };

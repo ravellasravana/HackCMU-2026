@@ -174,7 +174,7 @@ export function DiningCar() {
 
   function handleExtracted(result: ExtractResult) {
     const purchaseDate = result.meta.purchaseDate ?? result.fallbackDate;
-    const itemSource = result.source === "voice" || result.source === "photo" ? result.source : "receipt";
+    const itemSource = result.source === "voice" ? result.source : "receipt";
     const items = result.lines.map((l) => lineToItem(l, purchaseDate, itemSource));
     setState((s) => ({
       ...s,
@@ -184,7 +184,7 @@ export function DiningCar() {
     }));
     const flagged = items.filter((i) => !i.confirmed).length;
     const sourceLabel =
-      result.source === "k2" ? "by IFM K2" : result.source === "voice" ? "from what you said" : result.source === "photo" ? "from your photo" : "(local normalizer)";
+      result.source === "k2" ? "by IFM K2" : result.source === "voice" ? "from what you said" : "(local normalizer)";
     const msg =
       `${items.length} items loaded ${sourceLabel}` +
       (flagged ? ` · ${flagged} low-confidence ${flagged === 1 ? "line" : "lines"} — tap the amber chip to confirm` : ".") +
@@ -381,13 +381,7 @@ export function DiningCar() {
                   </Badge>
                   {state.lastSource && (
                     <Badge variant="outline" className="font-normal text-primary">
-                      {state.lastSource === "k2"
-                        ? "read by IFM K2"
-                        : state.lastSource === "voice"
-                          ? "added by voice"
-                          : state.lastSource === "photo"
-                            ? "added by photo scan"
-                            : "read locally"}
+                      {state.lastSource === "k2" ? "read by IFM K2" : state.lastSource === "voice" ? "added by voice" : "read locally"}
                     </Badge>
                   )}
                   {unconfirmed > 0 && (

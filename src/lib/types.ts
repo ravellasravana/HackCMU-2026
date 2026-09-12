@@ -49,7 +49,7 @@ export interface InventoryItem {
   /** User tapped confirm (or the match was confident enough not to ask). */
   confirmed: boolean;
   staple: boolean;
-  source: "receipt" | "manual" | "voice" | "photo";
+  source: "receipt" | "manual" | "voice";
 }
 
 export interface RecipeIngredient {
@@ -86,11 +86,11 @@ export interface ExtractedLine {
   category?: Category;
 }
 
-/** Result of any "here's what I bought" input method — pasted receipt, spoken sentence, or fridge photo. */
+/** Result of any "here's what I bought" input method — pasted receipt or spoken sentence. */
 export interface ExtractResult {
   lines: ExtractedLine[];
   meta: { retailer: string | null; purchaseDate: string | null };
-  source: "k2" | "local" | "voice" | "photo";
+  source: "k2" | "local" | "voice";
   warning?: string;
   fallbackDate: string;
 }
