@@ -1,5 +1,11 @@
 import type { MetadataRoute } from "next";
 
+// Required for `output: "export"` (the Capacitor Android build, see
+// scripts/build-capacitor.mjs) — without it Next treats this as a dynamic
+// route. The manifest content is fully static anyway, so this is a no-op
+// for the regular web build.
+export const dynamic = "force-static";
+
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Dining Car — stop throwing money in the bin",
