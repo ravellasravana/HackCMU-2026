@@ -4,7 +4,7 @@ import { parseModelJson } from "./jsonRepair";
 
 export type LlmProvider = "k2" | "gemini";
 
-function geminiConfigured(): boolean {
+export function geminiConfigured(): boolean {
   return Boolean(process.env.GEMINI_API_KEY);
 }
 
@@ -54,6 +54,50 @@ async function geminiJson<T>(prompt: string, { maxTokens = 2500 }: { maxTokens?:
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new Error(`Gemini request failed (${res.status}): ${body.slice(0, 300)}`);
+  }
+  const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+  const content = data.choices?.[0]?.message?.content ?? "";
+  return parseModelJson<T>(content);
+}
+
+/**
+ * Photo-of-your-fridge scanning is Gemini-only for now: it needs a vision-capable model and
+ * IFM K2's vision support has not been verified, so this bypasses the text-only provider
+ * routing above rather than silently guessing K2 can handle an image.
+ */
+export async function geminiVisionJson<T>(prompt: string, imageDataUrl: string, { maxTokens = 4000 }: { maxTokens?: number } = {}): Promise<T> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("GEMINI_API_KEY is not set");
+  const baseUrl = (process.env.GEMINI_BASE_URL ?? "https://generativelanguage.googleapis.com/v1beta/openai").replace(/\/$/, "");
+  const model = process.env.GEMINI_MODEL ?? "gemini-3.6-flash";
+
+  const res = await fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      temperature: 0.2,
+      max_tokens: maxTokens,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: "You return strictly valid JSON and nothing else." },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: prompt },
+            { type: "image_url", image_url: { url: imageDataUrl } },
+          ],
+        },
+      ],
+    }),
+    signal: AbortSignal.timeout(45_000),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Gemini vision request failed (${res.status}): ${body.slice(0, 300)}`);
   }
   const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
   const content = data.choices?.[0]?.message?.content ?? "";

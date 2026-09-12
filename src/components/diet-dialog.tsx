@@ -42,7 +42,7 @@ export function DietDialog({ open, onOpenChange, diet, onSave }: Props) {
           <DialogTitle className="flex items-center gap-2">
             <Leaf className="size-4" /> Dinner preferences
           </DialogTitle>
-          <DialogDescription>Applies to the recipe library and every IFM K2 dinner.</DialogDescription>
+          <DialogDescription>Applies to the recipe library and every AI-generated dinner.</DialogDescription>
         </DialogHeader>
 
         <label className="flex items-center justify-between rounded-lg border border-white/10 px-3 py-2 text-sm">

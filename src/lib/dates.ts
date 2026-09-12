@@ -30,6 +30,7 @@ export function todayISO(): string {
 }
 
 export function eatByDate(item: InventoryItem): string | null {
+  if (item.eatByOverride) return item.eatByOverride;
   const entry = FOOD_BY_ID[item.foodId];
   const life = shelfLifeDays(entry, item.storage, item.opened, item.category);
   if (life === undefined) return null;

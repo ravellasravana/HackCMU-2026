@@ -2,19 +2,19 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  CalendarPlus, Leaf, Mail, RotateCcw, Sparkles, Loader2,
+  CalendarPlus, Camera, Leaf, Mail, RotateCcw, Sparkles, Loader2,
   TrendingDown, Zap, ChevronRight,
 } from "lucide-react";
 import { addDays, todayISO } from "@/lib/dates";
 import { RECEIPT_PRESETS } from "@/lib/demo";
 import { filterRecipesByDiet } from "@/lib/diet";
 import { buildCalendar } from "@/lib/ics";
-import { lineToItem, manualItem, reassignFood } from "@/lib/inventory";
+import { lineToItem, manualItem, reassignFood, scannedItemToInventoryItem } from "@/lib/inventory";
 import { parseReceipt } from "@/lib/normalize";
 import { RECIPES } from "@/lib/recipes";
 import { buildPlan, withDates, type DatedItem } from "@/lib/scheduler";
 import { EMPTY_STATE, loadPersisted, savePersisted, type Persisted } from "@/lib/store";
-import type { DietPrefs, FoodEntry, InventoryItem, Recipe, Storage } from "@/lib/types";
+import type { DietPrefs, FoodEntry, InventoryItem, Recipe, ScannedItem, Storage } from "@/lib/types";
 import { useAnimatedNumber } from "@/hooks/useAnimatedNumber";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +26,7 @@ import { FridgeTimeline } from "@/components/fridge-timeline";
 import { Headline } from "@/components/headline";
 import { PlanPanel } from "@/components/plan-panel";
 import { ReceiptDialog, type ExtractResult } from "@/components/receipt-dialog";
+import { ScanDialog } from "@/components/scan-dialog";
 
 function providerLabel(source: "k2" | "gemini" | "local"): string {
   if (source === "k2") return "IFM K2";
@@ -79,7 +80,7 @@ function EmptyHero({ onDemo, onOpen }: { onDemo: () => void; onOpen: () => void 
             in the bin.
           </h2>
           <p className="mx-auto max-w-md text-base text-muted-foreground md:text-lg">
-            Forward your grocery receipt. We read it with IFM K2, set eat-by alarms on every item, and build a dinner plan that keeps as much money in your belly as possible.
+            Forward your grocery receipt. We read it with AI, set eat-by alarms on every item, and build a dinner plan that keeps as much money in your belly as possible.
           </p>
         </div>
 
@@ -98,7 +99,7 @@ function EmptyHero({ onDemo, onOpen }: { onDemo: () => void; onOpen: () => void 
             <Zap className="size-4 text-primary" />
             <div className="text-left">
               <div className="text-sm font-bold text-foreground">AI-powered</div>
-              <div className="max-w-[14rem] text-[11px] leading-tight text-muted-foreground">Optimised with IFM K2-Horizon-375B</div>
+              <div className="max-w-[14rem] text-[11px] leading-tight text-muted-foreground">Every dinner grounded in what you actually own</div>
             </div>
           </div>
         </div>
@@ -121,7 +122,7 @@ function EmptyHero({ onDemo, onOpen }: { onDemo: () => void; onOpen: () => void 
         <p className="text-xs text-muted-foreground">
           No account, no database, no tracking — everything stays in your browser.
           <br />
-          Powered by <span className="font-medium text-foreground">IFM K2-Horizon-375B</span> · USDA FoodKeeper shelf lives
+          Powered by <span className="font-medium text-foreground">AI</span> · USDA FoodKeeper shelf lives
         </p>
       </div>
     </section>
@@ -145,6 +146,7 @@ export function DiningCar() {
   const [confirming, setConfirming] = useState<InventoryItem | null>(null);
   const [editing, setEditing] = useState<InventoryItem | null>(null);
   const [dietOpen, setDietOpen] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
   const [k2Busy, setK2Busy] = useState(false);
   const [notice, setNotice] = useState<{ text: string; kind: "info" | "warn" } | null>(null);
 
@@ -199,6 +201,12 @@ export function DiningCar() {
     if (!item) return "Couldn't read that — try something like \"avocados\" or \"1 lb shrimp $8.99\".";
     setState((s) => ({ ...s, items: [...s.items, item] }));
     return null;
+  }
+
+  function handleScanned(items: ScannedItem[]) {
+    const newItems = items.map((i) => scannedItemToInventoryItem(i, today));
+    setState((s) => ({ ...s, items: [...s.items, ...newItems] }));
+    setNotice({ text: `${newItems.length} item${newItems.length === 1 ? "" : "s"} added from your photo, shelf life read straight from what the camera saw.`, kind: "info" });
   }
 
   function downloadCalendar() {
@@ -267,15 +275,15 @@ export function DiningCar() {
       <header className="sticky top-0 z-30 border-b border-white/8 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 md:px-8">
           <div className="flex items-center gap-2.5">
-            <div>
-              <div className="text-sm font-bold leading-none tracking-tight">Dining Car</div>
-              <div className="text-[10px] text-muted-foreground">IFM K2 · USDA FoodKeeper · HackCMU 2026</div>
-            </div>
+            <div className="text-sm font-bold leading-none tracking-tight">Dining Car</div>
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5">
             <Button size="sm" onClick={() => setReceiptOpen(true)}>
               <Mail /> Paste receipt
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setScanOpen(true)} title="Scan a fridge or leftovers photo with AI">
+              <Camera /> Scan fridge
             </Button>
             <Button
               size="sm"
@@ -392,7 +400,7 @@ export function DiningCar() {
 
       {/* ---- Footer ---- */}
       <footer className="border-t border-white/8 px-4 py-3 text-center text-[11px] text-muted-foreground md:px-8">
-        IFM K2-Horizon-375B reads receipts · USDA FoodKeeper sets the clocks · exact DP maximises dollars eaten before expiry · every recipe verified against your inventory
+        AI reads receipts · USDA FoodKeeper sets the clocks · exact DP maximises dollars eaten before expiry · every recipe verified against your inventory
         <span className="mx-2">·</span>
         <span className="font-medium text-foreground">HackCMU 2026 · Food Track</span>
       </footer>
@@ -419,6 +427,7 @@ export function DiningCar() {
         diet={state.diet}
         onSave={(diet: DietPrefs) => setState((s) => ({ ...s, diet }))}
       />
+      <ScanDialog open={scanOpen} onOpenChange={setScanOpen} onAdd={handleScanned} />
     </div>
   );
 }

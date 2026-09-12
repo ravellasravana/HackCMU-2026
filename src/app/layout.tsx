@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Dining Car — Stop throwing money in the bin",
   description:
-    "Forward your grocery receipt. IFM K2 reads it, USDA FoodKeeper sets eat-by clocks, and a value-maximising dinner plan ensures nothing rots.",
-  keywords: ["food waste", "grocery receipt", "meal planning", "IFM K2", "hackathon"],
+    "Forward your grocery receipt. AI reads it, USDA FoodKeeper sets eat-by clocks, and a value-maximising dinner plan ensures nothing rots.",
+  keywords: ["food waste", "grocery receipt", "meal planning", "AI", "hackathon"],
 };
 
 export const viewport: Viewport = {

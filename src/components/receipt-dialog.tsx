@@ -98,7 +98,7 @@ export function ReceiptDialog({ open, onOpenChange, onExtracted }: Props) {
                 <div className="scan-line pointer-events-none absolute inset-x-0 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent opacity-80" />
                 <ScanLine className="mx-auto mb-2 size-8 text-primary animate-pulse" />
                 <p className="text-sm font-medium">
-                  IFM K2 is reading your receipt…
+                  AI is reading your receipt…
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Extracting items → matching FoodKeeper shelf lives
