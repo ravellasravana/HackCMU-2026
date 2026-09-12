@@ -24,7 +24,7 @@ function Stat({ label, value, color }: { label: string; value: number; color: st
   );
 }
 
-export function Headline({ plan, retailer }: { plan: Plan; retailer: string | null }) {
+export function Headline({ plan, retailer, lifetimeSaved }: { plan: Plan; retailer: string | null; lifetimeSaved: number }) {
   const savedTotal = plan.savedByCooking + plan.savedByFreezing;
   const savedPct = plan.atRiskValue > 0 ? Math.round((savedTotal / plan.atRiskValue) * 100) : 100;
   const animatedPct = useAnimatedNumber(savedPct);
@@ -38,7 +38,7 @@ export function Headline({ plan, retailer }: { plan: Plan; retailer: string | nu
         {/* Label */}
         <p className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
           <span className="size-1.5 rounded-full bg-primary animate-pulse" />
-          IFM K2 · Value-Maximising Plan · {retailer ?? "Grocery receipt"}
+          Value-Maximising Plan · {retailer ?? "Grocery receipt"}
         </p>
 
         {/* Main comparison */}
@@ -80,6 +80,11 @@ export function Headline({ plan, retailer }: { plan: Plan; retailer: string | nu
               <> · earliest-expiry-first would still waste <span className="text-amber-300">${plan.wastedEarliestFirst.toFixed(2)}</span></>
             )}
           </p>
+          {lifetimeSaved > 0 && (
+            <p className="text-xs text-muted-foreground">
+              <AnimatedMoney value={lifetimeSaved} className="font-medium text-emerald-300" /> rescued in previous weeks with Dining Car
+            </p>
+          )}
         </div>
       </div>
     </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { Snowflake, Refrigerator, Home, Trash2, AlertTriangle } from "lucide-react";
+import { Snowflake, Refrigerator, Home, Trash2, AlertTriangle, Pencil } from "lucide-react";
 import { addDays, daysBetween, formatMoney, formatRelativeDay, parseISODate } from "@/lib/dates";
 import { FOOD_BY_ID, storageOptions } from "@/lib/foodkeeper";
 import { CONFIDENCE_CONFIRM_THRESHOLD } from "@/lib/inventory";
@@ -59,9 +59,10 @@ interface Props {
   onStorageChange: (id: string, storage: Storage) => void;
   onConfirm: (item: DatedItem) => void;
   onRemove: (id: string) => void;
+  onEdit: (item: DatedItem) => void;
 }
 
-export function FridgeTimeline({ items, plan, today, onStorageChange, onConfirm, onRemove }: Props) {
+export function FridgeTimeline({ items, plan, today, onStorageChange, onConfirm, onRemove, onEdit }: Props) {
   const axisStart = addDays(today, -AXIS_BEFORE);
   const firstUse = new Map<string, number>();
   for (const night of plan.nights) {
@@ -158,6 +159,7 @@ export function FridgeTimeline({ items, plan, today, onStorageChange, onConfirm,
                   </div>
                   <div className="mt-0.5 flex flex-wrap gap-x-1 text-[11px] text-muted-foreground">
                     <span>{formatMoney(item.price)}</span>
+                    {item.quantity > 1 && <span>· ×{item.quantity}</span>}
                     {item.unit && <span>· {item.unit}</span>}
                   </div>
                 </div>
@@ -228,6 +230,15 @@ export function FridgeTimeline({ items, plan, today, onStorageChange, onConfirm,
                     );
                   })}
                 </div>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  className="shrink-0 text-muted-foreground opacity-60 hover:text-foreground md:opacity-0 md:group-hover:opacity-100"
+                  onClick={() => onEdit(item)}
+                  aria-label={`Edit ${item.displayName}`}
+                >
+                  <Pencil />
+                </Button>
                 <Button
                   variant="ghost"
                   size="icon-xs"

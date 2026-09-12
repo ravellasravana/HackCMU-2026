@@ -2,26 +2,37 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  CalendarPlus, Mail, RotateCcw, Sparkles, Loader2, TrainFront,
+  CalendarPlus, Camera, Leaf, Mail, RotateCcw, Sparkles, Loader2,
   TrendingDown, Zap, ChevronRight,
 } from "lucide-react";
 import { addDays, todayISO } from "@/lib/dates";
 import { RECEIPT_PRESETS } from "@/lib/demo";
+import { filterRecipesByDiet } from "@/lib/diet";
 import { buildCalendar } from "@/lib/ics";
-import { lineToItem, manualItem, reassignFood } from "@/lib/inventory";
+import { lineToItem, manualItem, reassignFood, scannedItemToInventoryItem } from "@/lib/inventory";
 import { parseReceipt } from "@/lib/normalize";
 import { RECIPES } from "@/lib/recipes";
 import { buildPlan, withDates, type DatedItem } from "@/lib/scheduler";
 import { EMPTY_STATE, loadPersisted, savePersisted, type Persisted } from "@/lib/store";
-import type { InventoryItem, Recipe, Storage } from "@/lib/types";
+import type { DietPrefs, FoodEntry, InventoryItem, Recipe, ScannedItem, Storage } from "@/lib/types";
+import { useAnimatedNumber } from "@/hooks/useAnimatedNumber";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AddItem } from "@/components/add-item";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DietDialog } from "@/components/diet-dialog";
+import { EditItemDialog } from "@/components/edit-item-dialog";
 import { FridgeTimeline } from "@/components/fridge-timeline";
 import { Headline } from "@/components/headline";
 import { PlanPanel } from "@/components/plan-panel";
 import { ReceiptDialog, type ExtractResult } from "@/components/receipt-dialog";
+import { ScanDialog } from "@/components/scan-dialog";
+
+function providerLabel(source: "k2" | "gemini" | "local"): string {
+  if (source === "k2") return "IFM K2";
+  if (source === "gemini") return "Gemini";
+  return "the local normalizer";
+}
 
 /* ---- tiny floating food particles for the empty state hero ---- */
 const PARTICLES = ["🥬", "🍓", "🐔", "🥛", "🐟", "🥑", "🍌", "🥩"];
@@ -69,24 +80,28 @@ function EmptyHero({ onDemo, onOpen }: { onDemo: () => void; onOpen: () => void 
             in the bin.
           </h2>
           <p className="mx-auto max-w-md text-base text-muted-foreground md:text-lg">
-            Forward your grocery receipt. We read it with IFM K2, set eat-by alarms on every item, and build a dinner plan that keeps as much money in your belly as possible.
+            Forward your grocery receipt. We read it with AI, set eat-by alarms on every item, and build a dinner plan that keeps as much money in your belly as possible.
           </p>
         </div>
 
         {/* Stats row */}
         <div className="flex flex-wrap justify-center gap-4 py-2">
-          {[
-            { icon: TrendingDown, label: "Average annual food waste per US household", value: "$1,800" },
-            { icon: Zap, label: "Optimised with IFM K2-Horizon-375B", value: "AI-powered" },
-          ].map(({ icon: Icon, label, value }) => (
-            <div key={label} className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5">
-              <Icon className="size-4 text-primary" />
-              <div className="text-left">
-                <div className="text-sm font-bold text-foreground">{value}</div>
-                <div className="max-w-[14rem] text-[11px] leading-tight text-muted-foreground">{label}</div>
+          <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5">
+            <TrendingDown className="size-4 text-primary" />
+            <div className="text-left">
+              <div className="font-mono text-sm font-bold tabular-nums text-foreground">
+                ${Math.round(useAnimatedNumber(1800, 1600)).toLocaleString()}
               </div>
+              <div className="max-w-[14rem] text-[11px] leading-tight text-muted-foreground">Average annual food waste per US household</div>
             </div>
-          ))}
+          </div>
+          <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5">
+            <Zap className="size-4 text-primary" />
+            <div className="text-left">
+              <div className="text-sm font-bold text-foreground">AI-powered</div>
+              <div className="max-w-[14rem] text-[11px] leading-tight text-muted-foreground">Every dinner grounded in what you actually own</div>
+            </div>
+          </div>
         </div>
 
         {/* CTAs */}
@@ -107,7 +122,7 @@ function EmptyHero({ onDemo, onOpen }: { onDemo: () => void; onOpen: () => void 
         <p className="text-xs text-muted-foreground">
           No account, no database, no tracking — everything stays in your browser.
           <br />
-          Powered by <span className="font-medium text-foreground">IFM K2-Horizon-375B</span> · USDA FoodKeeper shelf lives
+          Powered by <span className="font-medium text-foreground">AI</span> · USDA FoodKeeper shelf lives
         </p>
       </div>
     </section>
@@ -129,6 +144,9 @@ export function DiningCar() {
   const [today, setToday] = useState(() => todayISO());
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [confirming, setConfirming] = useState<InventoryItem | null>(null);
+  const [editing, setEditing] = useState<InventoryItem | null>(null);
+  const [dietOpen, setDietOpen] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
   const [k2Busy, setK2Busy] = useState(false);
   const [notice, setNotice] = useState<{ text: string; kind: "info" | "warn" } | null>(null);
 
@@ -137,7 +155,10 @@ export function DiningCar() {
     return () => window.clearInterval(tick);
   }, []);
 
-  const recipes = useMemo(() => [...state.k2Recipes, ...RECIPES], [state.k2Recipes]);
+  const recipes = useMemo(
+    () => filterRecipesByDiet([...state.k2Recipes, ...RECIPES], state.diet),
+    [state.k2Recipes, state.diet],
+  );
   const dated: DatedItem[] = useMemo(() => withDates(state.items, today), [state.items, today]);
   const plan = useMemo(() => buildPlan(state.items, recipes, today), [state.items, recipes, today]);
 
@@ -162,7 +183,7 @@ export function DiningCar() {
     }));
     const flagged = items.filter((i) => !i.confirmed).length;
     const msg =
-      `${items.length} items loaded${result.source === "k2" ? " by IFM K2" : " (local normalizer)"}` +
+      `${items.length} items loaded by ${providerLabel(result.source)}` +
       (flagged ? ` · ${flagged} low-confidence ${flagged === 1 ? "line" : "lines"} — tap the amber chip to confirm` : ".") +
       (result.warning ? ` ⚠️ ${result.warning}` : "");
     setNotice({ text: msg, kind: flagged > 0 ? "warn" : "info" });
@@ -180,6 +201,12 @@ export function DiningCar() {
     if (!item) return "Couldn't read that — try something like \"avocados\" or \"1 lb shrimp $8.99\".";
     setState((s) => ({ ...s, items: [...s.items, item] }));
     return null;
+  }
+
+  function handleScanned(items: ScannedItem[]) {
+    const newItems = items.map((i) => scannedItemToInventoryItem(i, today));
+    setState((s) => ({ ...s, items: [...s.items, ...newItems] }));
+    setNotice({ text: `${newItems.length} item${newItems.length === 1 ? "" : "s"} added from your photo, shelf life read straight from what the camera saw.`, kind: "info" });
   }
 
   function downloadCalendar() {
@@ -200,27 +227,27 @@ export function DiningCar() {
       const res = await fetch("/api/dinners", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ items: state.items, today }),
+        body: JSON.stringify({ items: state.items, today, diet: state.diet }),
       });
       const data = (await res.json()) as {
         recipes?: Recipe[];
         rejected?: { title: string; reason: string }[];
-        source: string;
+        source: "k2" | "gemini" | "local";
         note?: string;
         error?: string;
       };
-      if (!res.ok) throw new Error(data.error ?? "K2 request failed");
+      if (!res.ok) throw new Error(data.error ?? "LLM request failed");
       if (data.recipes?.length) {
         setState((s) => ({ ...s, k2Recipes: data.recipes! }));
         const rejectedNote = data.rejected?.length
           ? ` Rejected ${data.rejected.length} ungrounded: ${data.rejected.map((r) => `${r.title} (${r.reason})`).join("; ")}.`
           : "";
         setNotice({
-          text: `IFM K2 proposed ${data.recipes.length} dinners that passed the grounding check.${rejectedNote}`,
+          text: `${providerLabel(data.source)} proposed ${data.recipes.length} dinners that passed the grounding check.${rejectedNote}`,
           kind: "info",
         });
       } else {
-        setNotice({ text: data.note ?? "K2 returned nothing usable — using the built-in recipe library.", kind: "warn" });
+        setNotice({ text: data.note ?? "Couldn't find a new AI dinner that fits your kitchen — tonight's plan is still from the recipe library.", kind: "warn" });
       }
     } catch (err) {
       setNotice({ text: (err as Error).message, kind: "warn" });
@@ -230,7 +257,13 @@ export function DiningCar() {
   }
 
   function reset() {
-    setState(EMPTY_STATE);
+    const rescuedThisWeek = plan.savedByCooking + plan.savedByFreezing;
+    setState((s) => ({
+      ...EMPTY_STATE,
+      customFoods: s.customFoods,
+      diet: s.diet,
+      lifetimeSaved: s.lifetimeSaved + rescuedThisWeek,
+    }));
     setNotice(null);
   }
 
@@ -242,18 +275,24 @@ export function DiningCar() {
       <header className="sticky top-0 z-30 border-b border-white/8 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 md:px-8">
           <div className="flex items-center gap-2.5">
-            <div className="flex size-8 items-center justify-center rounded-lg bg-primary/15">
-              <TrainFront className="size-4 text-primary" />
-            </div>
-            <div>
-              <div className="text-sm font-bold leading-none tracking-tight">Dining Car</div>
-              <div className="text-[10px] text-muted-foreground">IFM K2 · USDA FoodKeeper · HackCMU 2026</div>
-            </div>
+            <div className="text-sm font-bold leading-none tracking-tight">Dining Car</div>
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5">
             <Button size="sm" onClick={() => setReceiptOpen(true)}>
               <Mail /> Paste receipt
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setScanOpen(true)} title="Scan a fridge or leftovers photo with AI">
+              <Camera /> Scan fridge
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setDietOpen(true)}
+              title="Vegetarian / allergy preferences"
+              className={state.diet.vegetarian || state.diet.allergies.length ? "border-emerald-400/40 text-emerald-200" : undefined}
+            >
+              <Leaf /> Diet
             </Button>
             {hasItems && (
               <>
@@ -265,10 +304,10 @@ export function DiningCar() {
                   variant="outline"
                   onClick={askK2}
                   disabled={k2Busy}
-                  title="Ask IFM K2 for personalized dinners — verified against your inventory"
+                  title="Ask AI for fresh dinner ideas — every one verified against your inventory"
                 >
                   {k2Busy ? <Loader2 className="animate-spin" /> : <Sparkles />}
-                  {k2Busy ? "Thinking…" : "K2 dinners"}
+                  {k2Busy ? "Thinking…" : "AI dinners"}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={reset} aria-label="Clear everything">
                   <RotateCcw />
@@ -302,7 +341,7 @@ export function DiningCar() {
         <EmptyHero onDemo={loadDemo} onOpen={() => setReceiptOpen(true)} />
       ) : (
         <main className="flex flex-1 flex-col gap-6 px-4 py-6 md:px-8 md:py-8">
-          <Headline plan={plan} retailer={state.retailer} />
+          <Headline plan={plan} retailer={state.retailer} lifetimeSaved={state.lifetimeSaved} />
 
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)]">
             {/* Left: timeline */}
@@ -317,7 +356,7 @@ export function DiningCar() {
                   </Badge>
                   {state.lastSource && (
                     <Badge variant="outline" className="font-normal text-primary">
-                      read {state.lastSource === "k2" ? "by IFM K2" : "locally"}
+                      read {state.lastSource === "local" ? "locally" : `by ${providerLabel(state.lastSource)}`}
                     </Badge>
                   )}
                   {unconfirmed > 0 && (
@@ -343,6 +382,7 @@ export function DiningCar() {
                 onStorageChange={(id, storage: Storage) => updateItem(id, { storage })}
                 onConfirm={(item) => setConfirming(item)}
                 onRemove={(id) => setState((s) => ({ ...s, items: s.items.filter((it) => it.id !== id) }))}
+                onEdit={(item) => setEditing(item)}
               />
 
               <p className="px-1 text-[11px] text-muted-foreground">
@@ -360,7 +400,7 @@ export function DiningCar() {
 
       {/* ---- Footer ---- */}
       <footer className="border-t border-white/8 px-4 py-3 text-center text-[11px] text-muted-foreground md:px-8">
-        IFM K2-Horizon-375B reads receipts · USDA FoodKeeper sets the clocks · exact DP maximises dollars eaten before expiry · every recipe verified against your inventory
+        AI reads receipts · USDA FoodKeeper sets the clocks · exact DP maximises dollars eaten before expiry · every recipe verified against your inventory
         <span className="mx-2">·</span>
         <span className="font-medium text-foreground">HackCMU 2026 · Food Track</span>
       </footer>
@@ -374,7 +414,20 @@ export function DiningCar() {
           updateItem(itemId, (it) => reassignFood(it, foodId));
           setConfirming(null);
         }}
+        onCreateFood={(itemId, entry: FoodEntry) => {
+          setState((s) => ({ ...s, customFoods: [...s.customFoods, entry] }));
+          updateItem(itemId, (it) => reassignFood(it, entry.id));
+          setConfirming(null);
+        }}
       />
+      <EditItemDialog item={editing} onClose={() => setEditing(null)} onSave={(id, patch) => updateItem(id, patch)} />
+      <DietDialog
+        open={dietOpen}
+        onOpenChange={setDietOpen}
+        diet={state.diet}
+        onSave={(diet: DietPrefs) => setState((s) => ({ ...s, diet }))}
+      />
+      <ScanDialog open={scanOpen} onOpenChange={setScanOpen} onAdd={handleScanned} />
     </div>
   );
 }

@@ -113,6 +113,28 @@ export const FOOD_BY_ID: Record<string, FoodEntry> = Object.fromEntries(
   FOODKEEPER.map((f) => [f.id, f]),
 );
 
+/**
+ * Add a user-defined food so it behaves exactly like a built-in FoodKeeper entry:
+ * matchable by the normalizer, selectable in the confirm dialog, dated by the scheduler.
+ * Used when someone buys something outside the ~90 built-in foods (e.g. "kombucha").
+ */
+export function registerFood(entry: FoodEntry): void {
+  const existingIndex = FOODKEEPER.findIndex((f) => f.id === entry.id);
+  if (existingIndex >= 0) FOODKEEPER[existingIndex] = entry;
+  else FOODKEEPER.push(entry);
+  FOOD_BY_ID[entry.id] = entry;
+}
+
+/** Turn a free-typed food name into a stable id that cannot collide with a built-in one. */
+export function customFoodId(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return `custom-${slug || "item"}`;
+}
+
 /** Fallback shelf lives when a line can only be classified to a category. */
 export const CATEGORY_DEFAULTS: Record<
   Category,
