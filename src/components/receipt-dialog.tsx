@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Loader2, ScanLine, Mail } from "lucide-react";
 import { addDays, todayISO } from "@/lib/dates";
 import { RECEIPT_PRESETS } from "@/lib/demo";
-import type { ReceiptMeta } from "@/lib/normalize";
+import { parseReceipt, type ReceiptMeta } from "@/lib/normalize";
 import type { ExtractedLine } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -43,15 +43,23 @@ export function ReceiptDialog({ open, onOpenChange, onExtracted }: Props) {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/extract", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? `Extraction failed (${res.status})`);
+      let data: { lines?: ExtractedLine[]; meta?: ReceiptMeta; source?: "k2" | "local"; warning?: string; error?: string };
+      try {
+        const res = await fetch("/api/extract", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+        data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? `Extraction failed (${res.status})`);
+      } catch {
+        // No server available (e.g. the standalone mobile build) — fall back to the
+        // same deterministic normalizer the server uses, entirely client-side.
+        const local = parseReceipt(text);
+        data = { ...local, source: "local" };
+      }
       if (!data.lines?.length) throw new Error("No food items found. Paste the part of the email that lists what you bought.");
-      onExtracted({ ...data, fallbackDate });
+      onExtracted({ ...data, lines: data.lines, meta: data.meta!, source: data.source!, fallbackDate });
       setText("");
       onOpenChange(false);
     } catch (err) {

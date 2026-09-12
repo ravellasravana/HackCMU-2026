@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  CalendarPlus, Mail, RotateCcw, Sparkles, Loader2, TrainFront,
+  CalendarPlus, CalendarCheck2, Mail, RotateCcw, Sparkles, Loader2, TrainFront,
   TrendingDown, Zap, ChevronRight,
 } from "lucide-react";
 import { addDays, todayISO } from "@/lib/dates";
 import { RECEIPT_PRESETS } from "@/lib/demo";
+import * as googleCalendar from "@/lib/google-calendar";
 import { buildCalendar } from "@/lib/ics";
 import { lineToItem, manualItem, reassignFood } from "@/lib/inventory";
 import { parseReceipt } from "@/lib/normalize";
@@ -131,10 +132,30 @@ export function DiningCar() {
   const [confirming, setConfirming] = useState<InventoryItem | null>(null);
   const [k2Busy, setK2Busy] = useState(false);
   const [notice, setNotice] = useState<{ text: string; kind: "info" | "warn" } | null>(null);
+  const [googleConnected, setGoogleConnected] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
 
   useEffect(() => {
     const tick = window.setInterval(() => setToday(todayISO()), 60_000);
     return () => window.clearInterval(tick);
+  }, []);
+
+  useEffect(() => {
+    setGoogleConnected(googleCalendar.isConnected());
+    const handle = googleCalendar.registerRedirectListener((ok, message) => {
+      setGoogleBusy(false);
+      if (ok) {
+        setGoogleConnected(true);
+        setNotice({ text: "Connected to Google Calendar. Syncing your plan now…", kind: "info" });
+        void handleSyncGoogle();
+      } else {
+        setNotice({ text: message ?? "Google sign-in didn't complete.", kind: "warn" });
+      }
+    });
+    return () => {
+      void handle.then((h) => h.remove());
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const recipes = useMemo(() => [...state.k2Recipes, ...RECIPES], [state.k2Recipes]);
@@ -191,6 +212,36 @@ export function DiningCar() {
     a.download = "dining-car-eat-by.ics";
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function handleGoogleCalendar() {
+    if (!googleConnected) {
+      setGoogleBusy(true);
+      try {
+        await googleCalendar.connect();
+      } catch (err) {
+        setGoogleBusy(false);
+        setNotice({ text: (err as Error).message, kind: "warn" });
+      }
+      return;
+    }
+    await handleSyncGoogle();
+  }
+
+  async function handleSyncGoogle() {
+    setGoogleBusy(true);
+    try {
+      const result = await googleCalendar.syncToGoogleCalendar(dated, plan);
+      const failedNote = result.failed ? `, ${result.failed} failed${result.firstError ? ` (${result.firstError})` : ""}` : "";
+      setNotice({
+        text: `Synced to Google Calendar: ${result.created} added, ${result.updated} updated${failedNote}.`,
+        kind: result.failed ? "warn" : "info",
+      });
+    } catch (err) {
+      setNotice({ text: (err as Error).message, kind: "warn" });
+    } finally {
+      setGoogleBusy(false);
+    }
   }
 
   async function askK2() {
@@ -257,8 +308,18 @@ export function DiningCar() {
             </Button>
             {hasItems && (
               <>
-                <Button size="sm" variant="outline" onClick={downloadCalendar} title="Download eat-by alarms + dinner events">
-                  <CalendarPlus /> Calendar
+                <Button size="sm" variant="outline" onClick={downloadCalendar} title="Download eat-by alarms + dinner events as a .ics file">
+                  <CalendarPlus /> .ics
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleGoogleCalendar}
+                  disabled={googleBusy}
+                  title={googleConnected ? "Push eat-by alarms + dinner events to your Google Calendar" : "Connect your Google Calendar"}
+                >
+                  {googleBusy ? <Loader2 className="animate-spin" /> : <CalendarCheck2 />}
+                  {googleBusy ? "Working…" : googleConnected ? "Sync Calendar" : "Connect Calendar"}
                 </Button>
                 <Button
                   size="sm"
