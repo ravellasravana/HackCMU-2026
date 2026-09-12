@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// Generates the Dining Car app icon: a locomotive "served" on a plate,
-// in the app's own dark/amber palette (see src/app/globals.css --primary /
-// --background), then rasterizes background + foreground layers (for
-// Android adaptive icons) plus a combined icon and a 512x512 Play Store
-// listing icon.
+// Generates the Dining Car app icon: a locomotive "served" on a plate, in
+// the app's own Carnegie Mellon palette (see src/app/globals.css --primary /
+// --background — Cardinal Red on charcoal), then rasterizes background +
+// foreground layers (for Android adaptive icons) plus a combined icon and a
+// 512x512 Play Store listing icon.
 import sharp from "sharp";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
@@ -11,12 +11,12 @@ import path from "node:path";
 const OUT = path.resolve(import.meta.dirname, "..", "assets");
 mkdirSync(OUT, { recursive: true });
 
-const AMBER = "#f2c265"; // ~oklch(0.83 0.17 75), the app's --primary
-const AMBER_DARK = "#c98f2e";
-const CREAM = "#f7ede0";
-const BROWN = "#3a2a1a";
-const BG_DARK = "#150f0a"; // ~oklch(0.13 0.014 60), the app's dark --background
-const BG_DARK2 = "#2a1d12";
+const RED = "#df1e39"; // oklch(0.58 0.22 22), the app's --primary (CMU Cardinal Red)
+const RED_DARK = "#a3132b";
+const CREAM = "#f2f2f2";
+const IRON_GREY = "#63666a"; // CMU's official secondary color — needs to be light enough to read against BG_DARK
+const BG_DARK = "#0c0d10"; // oklch(0.16 0.006 255), the app's --background
+const BG_DARK2 = "#1c1e22";
 
 const SIZE = 1024;
 const CX = SIZE / 2;
@@ -44,22 +44,22 @@ const TRAIN_TY = 480 - 12 * TRAIN_SCALE;
 const trainAndPlate = `
   <!-- plate -->
   <ellipse cx="${CX}" cy="600" rx="330" ry="290" fill="${CREAM}" />
-  <ellipse cx="${CX}" cy="600" rx="330" ry="290" fill="none" stroke="${AMBER_DARK}" stroke-width="10" opacity="0.35" />
-  <ellipse cx="${CX}" cy="590" rx="250" ry="215" fill="none" stroke="${AMBER_DARK}" stroke-width="6" opacity="0.25" />
+  <ellipse cx="${CX}" cy="600" rx="330" ry="290" fill="none" stroke="${RED_DARK}" stroke-width="10" opacity="0.3" />
+  <ellipse cx="${CX}" cy="590" rx="250" ry="215" fill="none" stroke="${RED_DARK}" stroke-width="6" opacity="0.2" />
 
   <!-- steam -->
-  <circle cx="512" cy="250" r="34" fill="${AMBER}" opacity="0.85" />
-  <circle cx="566" cy="204" r="24" fill="${AMBER}" opacity="0.6" />
-  <circle cx="608" cy="164" r="16" fill="${AMBER}" opacity="0.4" />
+  <circle cx="512" cy="250" r="34" fill="${CREAM}" opacity="0.55" />
+  <circle cx="566" cy="204" r="24" fill="${CREAM}" opacity="0.4" />
+  <circle cx="608" cy="164" r="16" fill="${CREAM}" opacity="0.25" />
 
-  <!-- train-front (same icon used in the app header) -->
+  <!-- train-front (same icon used in the app header) — Cardinal Red, the vibrant CMU accent -->
   <g transform="translate(${TRAIN_TX}, ${TRAIN_TY}) scale(${TRAIN_SCALE})"
-     fill="none" stroke="${BROWN}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+     fill="none" stroke="${RED}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
     ${TRAIN_FRONT_PATHS.map((d) => `<path d="${d}" />`).join("\n    ")}
   </g>
 
   <!-- fork (left of plate) -->
-  <g fill="${BROWN}" opacity="0.9">
+  <g fill="${IRON_GREY}" opacity="0.9">
     <rect x="150" y="560" width="30" height="240" rx="14" />
     <rect x="126" y="430" width="14" height="140" rx="7" />
     <rect x="150" y="430" width="14" height="140" rx="7" />
@@ -68,7 +68,7 @@ const trainAndPlate = `
   </g>
 
   <!-- knife (right of plate) -->
-  <g fill="${BROWN}" opacity="0.9">
+  <g fill="${IRON_GREY}" opacity="0.9">
     <rect x="844" y="560" width="30" height="240" rx="14" />
     <path d="M 830 430 Q 859 420 888 430 L 874 560 L 844 560 Z" />
   </g>

@@ -18,84 +18,59 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AddItem } from "@/components/add-item";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { FridgeTimeline } from "@/components/fridge-timeline";
 import { Headline } from "@/components/headline";
 import { PlanPanel } from "@/components/plan-panel";
 import { ReceiptDialog, type ExtractResult } from "@/components/receipt-dialog";
 
-/* ---- tiny floating food particles for the empty state hero ---- */
-const PARTICLES = ["🥬", "🍓", "🐔", "🥛", "🐟", "🥑", "🍌", "🥩"];
-
-function FoodParticle({ emoji, style }: { emoji: string; style: React.CSSProperties }) {
-  return (
-    <div className="pointer-events-none absolute select-none text-2xl opacity-20 animate-star" style={style}>
-      {emoji}
-    </div>
-  );
-}
-
 /**
- * The very first thing anyone sees. One question, one input, front and
- * center — say it, type it, or paste a receipt, and the moment anything's
- * added the app switches straight to the main dashboard (see `hasItems`
- * below). No copy to read, no separate "get started" click before the
- * actual input is reachable.
+ * The very first thing anyone sees: a single, unavoidable "input food"
+ * prompt. There's exactly one way past it — add something (voice/text, via
+ * AddItem) or paste a whole receipt — plus the dialog's own close button for
+ * anyone who wants to look at the (empty) app first. Either way, closing it
+ * reveals the same main page underneath.
  */
-function EmptyHero({
+function WelcomeDialog({
+  open,
+  onOpenChange,
   onAdd,
-  onExtracted,
-  onOpen,
+  onOpenReceipt,
   onDemo,
 }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onAdd: (text: string) => string | null;
-  onExtracted: (result: ExtractResult) => void;
-  onOpen: () => void;
+  onOpenReceipt: () => void;
   onDemo: () => void;
 }) {
   return (
-    <section className="relative flex flex-1 flex-col items-center justify-center overflow-hidden px-4 py-16 text-center">
-      {/* Background particles */}
-      {PARTICLES.map((emoji, i) => (
-        <FoodParticle
-          key={i}
-          emoji={emoji}
-          style={{
-            top: `${15 + i * 9}%`,
-            left: `${8 + ((i * 37) % 84)}%`,
-            animationDelay: `${i * 0.4}s`,
-            animationDuration: `${3 + (i % 3)}s`,
-          }}
-        />
-      ))}
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-2xl font-black tracking-tight">Input food</DialogTitle>
+          <DialogDescription>Type what you bought, or paste a whole receipt below.</DialogDescription>
+        </DialogHeader>
 
-      <div className="relative z-10 w-full max-w-lg space-y-5 animate-float-in">
-        <div className="flex justify-center gap-1 text-5xl">
-          <span className="animate-slide-up">🧾</span>
-          <span className="animate-slide-up" style={{ animationDelay: "100ms" }}>
-            →
-          </span>
-          <span className="animate-slide-up" style={{ animationDelay: "200ms" }}>
-            🍽️
-          </span>
+        <AddItem onAdd={onAdd} autoFocus />
+
+        <div className="flex items-center gap-3 text-[11px] uppercase tracking-wider text-muted-foreground">
+          <span className="h-px flex-1 bg-border" /> or <span className="h-px flex-1 bg-border" />
         </div>
 
-        <h2 className="text-3xl font-black leading-tight tracking-tight md:text-4xl">What did you just buy?</h2>
+        <Button variant="outline" size="lg" onClick={onOpenReceipt} className="w-full">
+          <Mail /> Paste a whole receipt
+        </Button>
 
-        <div className="text-left">
-          <AddItem onAdd={onAdd} onExtracted={onExtracted} autoFocus />
-        </div>
-
-        <p className="text-xs text-muted-foreground">
-          <button type="button" onClick={onOpen} className="underline decoration-dotted underline-offset-2 hover:text-foreground">
-            paste a whole receipt instead
-          </button>
-          {" · "}
-          <button type="button" onClick={onDemo} className="underline decoration-dotted underline-offset-2 hover:text-foreground">
-            try a demo
-          </button>
-        </p>
-      </div>
-    </section>
+        <button
+          type="button"
+          onClick={onDemo}
+          className="text-center text-xs text-muted-foreground underline decoration-dotted underline-offset-2 hover:text-foreground"
+        >
+          or just try a demo
+        </button>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -113,6 +88,7 @@ export function DiningCar() {
 
   const [today, setToday] = useState(() => todayISO());
   const [receiptOpen, setReceiptOpen] = useState(false);
+  const [welcomeOpen, setWelcomeOpen] = useState(() => state.items.length === 0);
   const [confirming, setConfirming] = useState<InventoryItem | null>(null);
   const [k2Busy, setK2Busy] = useState(false);
   const [notice, setNotice] = useState<{ text: string; kind: "info" | "warn" } | null>(null);
@@ -158,8 +134,7 @@ export function DiningCar() {
 
   function handleExtracted(result: ExtractResult) {
     const purchaseDate = result.meta.purchaseDate ?? result.fallbackDate;
-    const itemSource = result.source === "voice" ? result.source : "receipt";
-    const items = result.lines.map((l) => lineToItem(l, purchaseDate, itemSource));
+    const items = result.lines.map((l) => lineToItem(l, purchaseDate, "receipt"));
     setState((s) => ({
       ...s,
       items: [...s.items, ...items],
@@ -167,10 +142,8 @@ export function DiningCar() {
       lastSource: result.source,
     }));
     const flagged = items.filter((i) => !i.confirmed).length;
-    const sourceLabel =
-      result.source === "k2" ? "by IFM K2" : result.source === "voice" ? "from what you said" : "(local normalizer)";
     const msg =
-      `${items.length} items loaded ${sourceLabel}` +
+      `${items.length} items loaded${result.source === "k2" ? " by IFM K2" : " (local normalizer)"}` +
       (flagged ? ` · ${flagged} low-confidence ${flagged === 1 ? "line" : "lines"} — tap the amber chip to confirm` : ".") +
       (result.warning ? ` ⚠️ ${result.warning}` : "");
     setNotice({ text: msg, kind: flagged > 0 ? "warn" : "info" });
@@ -345,45 +318,45 @@ export function DiningCar() {
         </div>
       )}
 
-      {/* ---- Main content ---- */}
-      {!hasItems ? (
-        <EmptyHero onAdd={handleAdd} onExtracted={handleExtracted} onOpen={() => setReceiptOpen(true)} onDemo={loadDemo} />
-      ) : (
-        <main className="flex flex-1 flex-col gap-6 px-4 py-6 md:px-8 md:py-8">
-          <Headline plan={plan} retailer={state.retailer} />
+      {/* ---- Main content — always the same page; the welcome dialog above handles first-run ---- */}
+      <main className="flex flex-1 flex-col gap-6 px-4 py-6 md:px-8 md:py-8">
+        {hasItems && <Headline plan={plan} retailer={state.retailer} />}
 
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)]">
-            {/* Left: timeline */}
-            <section className="space-y-3 min-w-0">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-sm font-semibold">
-                    Fridge timeline
-                  </h2>
+        <div className={hasItems ? "grid gap-6 lg:grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)]" : "mx-auto w-full max-w-xl"}>
+          {/* Left: timeline */}
+          <section className="space-y-3 min-w-0">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-sm font-semibold">Fridge timeline</h2>
+                {hasItems && (
                   <Badge variant="secondary" className="font-normal">
                     {perishableCount} items
                   </Badge>
-                  {state.lastSource && (
-                    <Badge variant="outline" className="font-normal text-primary">
-                      {state.lastSource === "k2" ? "read by IFM K2" : state.lastSource === "voice" ? "added by voice" : "read locally"}
-                    </Badge>
-                  )}
-                  {unconfirmed > 0 && (
-                    <Badge variant="outline" className="border-amber-400/40 font-normal text-amber-200">
-                      {unconfirmed} to confirm
-                    </Badge>
-                  )}
-                </div>
+                )}
+                {state.lastSource && (
+                  <Badge variant="outline" className="font-normal text-primary">
+                    {state.lastSource === "k2" ? "read by IFM K2" : "read locally"}
+                  </Badge>
+                )}
+                {unconfirmed > 0 && (
+                  <Badge variant="outline" className="border-amber-400/40 font-normal text-amber-200">
+                    {unconfirmed} to confirm
+                  </Badge>
+                )}
+              </div>
+              {hasItems && (
                 <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
                   <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-emerald-400 inline-block" />4+ days</span>
                   <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-amber-400 inline-block" />2–3 days</span>
                   <span className="flex items-center gap-1"><span className="size-2 rounded-full bg-rose-400 inline-block" />eat now</span>
                   <span>🍴 planned</span>
                 </div>
-              </div>
+              )}
+            </div>
 
-              <AddItem onAdd={handleAdd} onExtracted={handleExtracted} />
+            <AddItem onAdd={handleAdd} />
 
+            {hasItems ? (
               <FridgeTimeline
                 items={dated}
                 plan={plan}
@@ -392,19 +365,31 @@ export function DiningCar() {
                 onConfirm={(item) => setConfirming(item)}
                 onRemove={(id) => setState((s) => ({ ...s, items: s.items.filter((it) => it.id !== id) }))}
               />
+            ) : (
+              <div className="rounded-2xl border border-dashed border-white/15 p-10 text-center text-sm text-muted-foreground">
+                Your fridge is empty — add something above, or{" "}
+                <button type="button" onClick={() => setReceiptOpen(true)} className="text-primary underline decoration-dotted underline-offset-2">
+                  paste a receipt
+                </button>
+                .
+              </div>
+            )}
 
+            {hasItems && (
               <p className="px-1 text-[11px] text-muted-foreground">
                 Toggle where each item lives (counter / fridge / freezer) and the deadline changes live. Shelf lives from USDA FoodKeeper.
               </p>
-            </section>
+            )}
+          </section>
 
-            {/* Right: plan */}
+          {/* Right: plan */}
+          {hasItems && (
             <aside className="space-y-0 min-w-0">
               <PlanPanel plan={plan} items={dated} today={today} />
             </aside>
-          </div>
-        </main>
-      )}
+          )}
+        </div>
+      </main>
 
       {/* ---- Footer ---- */}
       <footer className="border-t border-white/8 px-4 py-3 text-center text-[11px] text-muted-foreground md:px-8">
@@ -414,6 +399,19 @@ export function DiningCar() {
       </footer>
 
       {/* ---- Dialogs ---- */}
+      <WelcomeDialog
+        open={welcomeOpen && !hasItems}
+        onOpenChange={setWelcomeOpen}
+        onAdd={handleAdd}
+        onOpenReceipt={() => {
+          setWelcomeOpen(false);
+          setReceiptOpen(true);
+        }}
+        onDemo={() => {
+          setWelcomeOpen(false);
+          loadDemo();
+        }}
+      />
       <ReceiptDialog open={receiptOpen} onOpenChange={setReceiptOpen} onExtracted={handleExtracted} />
       <ConfirmDialog
         item={confirming}

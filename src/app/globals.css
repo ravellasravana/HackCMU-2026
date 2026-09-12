@@ -83,38 +83,42 @@
   --chart-5: oklch(0.269 0 0);
 }
 
-/* Dining Car: warm night-train palette — the dark mode is always on. */
+/*
+ * Dining Car: Carnegie Mellon colors — Cardinal Red (#C41230, the official
+ * CMU red) as the vibrant primary accent on a cool charcoal ("Iron Grey"
+ * family) background, the dark mode is always on.
+ */
 .dark {
-  --background: oklch(0.13 0.014 60);
-  --foreground: oklch(0.97 0.01 80);
-  --card: oklch(0.18 0.014 60);
-  --card-foreground: oklch(0.97 0.01 80);
-  --popover: oklch(0.19 0.014 60);
-  --popover-foreground: oklch(0.97 0.01 80);
-  --primary: oklch(0.83 0.17 75);
-  --primary-foreground: oklch(0.19 0.03 70);
-  --secondary: oklch(0.25 0.015 60);
-  --secondary-foreground: oklch(0.97 0.01 80);
-  --muted: oklch(0.24 0.015 60);
-  --muted-foreground: oklch(0.70 0.02 70);
-  --accent: oklch(0.25 0.015 60);
-  --accent-foreground: oklch(0.97 0.01 80);
-  --border: oklch(1 0.01 80 / 9%);
-  --input: oklch(1 0.01 80 / 12%);
-  --ring: oklch(0.83 0.17 75);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
+  --background: oklch(0.16 0.006 255);
+  --foreground: oklch(0.97 0.002 255);
+  --card: oklch(0.21 0.007 255);
+  --card-foreground: oklch(0.97 0.002 255);
+  --popover: oklch(0.22 0.007 255);
+  --popover-foreground: oklch(0.97 0.002 255);
+  --primary: oklch(0.58 0.22 22);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.29 0.008 255);
+  --secondary-foreground: oklch(0.97 0.002 255);
+  --muted: oklch(0.27 0.008 255);
+  --muted-foreground: oklch(0.72 0.008 255);
+  --accent: oklch(0.29 0.008 255);
+  --accent-foreground: oklch(0.97 0.002 255);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 13%);
+  --ring: oklch(0.58 0.22 22);
+  --chart-1: oklch(0.58 0.22 22);
+  --chart-2: oklch(0.87 0 0);
+  --chart-3: oklch(0.556 0 0);
+  --chart-4: oklch(0.439 0 0);
   --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.18 0.014 60);
-  --sidebar-foreground: oklch(0.97 0.01 80);
-  --sidebar-primary: oklch(0.83 0.17 75);
-  --sidebar-primary-foreground: oklch(0.19 0.03 70);
-  --sidebar-accent: oklch(0.25 0.015 60);
-  --sidebar-accent-foreground: oklch(0.97 0.01 80);
-  --sidebar-border: oklch(1 0.01 80 / 9%);
-  --sidebar-ring: oklch(0.83 0.17 75);
+  --sidebar: oklch(0.21 0.007 255);
+  --sidebar-foreground: oklch(0.97 0.002 255);
+  --sidebar-primary: oklch(0.58 0.22 22);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.29 0.008 255);
+  --sidebar-accent-foreground: oklch(0.97 0.002 255);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.58 0.22 22);
 }
 
 @layer base {
@@ -142,8 +146,8 @@
 }
 
 @keyframes glow-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 oklch(0.83 0.17 75 / 0); }
-  50%       { box-shadow: 0 0 24px 8px oklch(0.83 0.17 75 / 0.25); }
+  0%, 100% { box-shadow: 0 0 0 0 oklch(0.58 0.22 22 / 0); }
+  50%       { box-shadow: 0 0 24px 8px oklch(0.58 0.22 22 / 0.35); }
 }
 
 @keyframes shimmer {

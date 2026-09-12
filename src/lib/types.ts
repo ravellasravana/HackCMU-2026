@@ -49,7 +49,7 @@ export interface InventoryItem {
   /** User tapped confirm (or the match was confident enough not to ask). */
   confirmed: boolean;
   staple: boolean;
-  source: "receipt" | "manual" | "voice";
+  source: "receipt" | "manual";
 }
 
 export interface RecipeIngredient {
@@ -86,11 +86,11 @@ export interface ExtractedLine {
   category?: Category;
 }
 
-/** Result of any "here's what I bought" input method — pasted receipt or spoken sentence. */
+/** Result of parsing a pasted receipt, whether by K2 or the local normalizer. */
 export interface ExtractResult {
   lines: ExtractedLine[];
   meta: { retailer: string | null; purchaseDate: string | null };
-  source: "k2" | "local" | "voice";
+  source: "k2" | "local";
   warning?: string;
   fallbackDate: string;
 }
