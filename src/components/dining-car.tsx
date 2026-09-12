@@ -174,7 +174,8 @@ export function DiningCar() {
 
   function handleExtracted(result: ExtractResult) {
     const purchaseDate = result.meta.purchaseDate ?? result.fallbackDate;
-    const items = result.lines.map((l) => lineToItem(l, purchaseDate, "receipt"));
+    const itemSource = result.source === "voice" || result.source === "photo" ? result.source : "receipt";
+    const items = result.lines.map((l) => lineToItem(l, purchaseDate, itemSource));
     setState((s) => ({
       ...s,
       items: [...s.items, ...items],
@@ -182,8 +183,10 @@ export function DiningCar() {
       lastSource: result.source,
     }));
     const flagged = items.filter((i) => !i.confirmed).length;
+    const sourceLabel =
+      result.source === "k2" ? "by IFM K2" : result.source === "voice" ? "from what you said" : result.source === "photo" ? "from your photo" : "(local normalizer)";
     const msg =
-      `${items.length} items loaded${result.source === "k2" ? " by IFM K2" : " (local normalizer)"}` +
+      `${items.length} items loaded ${sourceLabel}` +
       (flagged ? ` · ${flagged} low-confidence ${flagged === 1 ? "line" : "lines"} — tap the amber chip to confirm` : ".") +
       (result.warning ? ` ⚠️ ${result.warning}` : "");
     setNotice({ text: msg, kind: flagged > 0 ? "warn" : "info" });
@@ -378,7 +381,13 @@ export function DiningCar() {
                   </Badge>
                   {state.lastSource && (
                     <Badge variant="outline" className="font-normal text-primary">
-                      read {state.lastSource === "k2" ? "by IFM K2" : "locally"}
+                      {state.lastSource === "k2"
+                        ? "read by IFM K2"
+                        : state.lastSource === "voice"
+                          ? "added by voice"
+                          : state.lastSource === "photo"
+                            ? "added by photo scan"
+                            : "read locally"}
                     </Badge>
                   )}
                   {unconfirmed > 0 && (
@@ -395,7 +404,7 @@ export function DiningCar() {
                 </div>
               </div>
 
-              <AddItem onAdd={handleAdd} />
+              <AddItem onAdd={handleAdd} onExtracted={handleExtracted} />
 
               <FridgeTimeline
                 items={dated}

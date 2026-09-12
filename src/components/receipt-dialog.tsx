@@ -5,18 +5,12 @@ import { Loader2, ScanLine, Mail } from "lucide-react";
 import { addDays, todayISO } from "@/lib/dates";
 import { RECEIPT_PRESETS } from "@/lib/demo";
 import { parseReceipt, type ReceiptMeta } from "@/lib/normalize";
-import type { ExtractedLine } from "@/lib/types";
+import type { ExtractedLine, ExtractResult } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-export interface ExtractResult {
-  lines: ExtractedLine[];
-  meta: ReceiptMeta;
-  source: "k2" | "local";
-  warning?: string;
-  fallbackDate: string;
-}
+export type { ExtractResult } from "@/lib/types";
 
 interface Props {
   open: boolean;
