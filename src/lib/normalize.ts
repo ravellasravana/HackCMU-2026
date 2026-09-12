@@ -203,7 +203,11 @@ export function normalizeLine(rawLine: string): ExtractedLine | null {
   if (desc.length < 2 || !/[a-z]/i.test(desc)) return null;
 
   const { best } = matchFood(desc);
-  const expandedName = titleCase(expand(tokenize(desc)).join(" "));
+  const expandedName = titleCase(
+    expand(tokenize(desc))
+      .filter((t) => t.length > 1)
+      .join(" "),
+  );
 
   if (!best) {
     return {
