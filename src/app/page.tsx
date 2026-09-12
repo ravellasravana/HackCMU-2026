@@ -1,5 +1,5 @@
-import { DiningCar } from "@/components/dining-car";
+import { DiningCarLoader } from "@/components/dining-car-loader";
 
 export default function Home() {
-  return <DiningCar />;
+  return <DiningCarLoader />;
 }

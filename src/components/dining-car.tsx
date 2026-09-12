@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CalendarPlus, Mail, RotateCcw, Sparkles, Loader2, TrainFront } from "lucide-react";
 import { addDays, todayISO } from "@/lib/dates";
 import { RECEIPT_PRESETS } from "@/lib/demo";
@@ -9,7 +9,7 @@ import { lineToItem, manualItem, reassignFood } from "@/lib/inventory";
 import { parseReceipt } from "@/lib/normalize";
 import { RECIPES } from "@/lib/recipes";
 import { buildPlan, withDates, type DatedItem } from "@/lib/scheduler";
-import { EMPTY_STATE, getServerSnapshot, getSnapshot, setPersisted, subscribe } from "@/lib/store";
+import { EMPTY_STATE, loadPersisted, savePersisted, type Persisted } from "@/lib/store";
 import type { InventoryItem, Recipe, Storage } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,10 +21,14 @@ import { PlanPanel } from "@/components/plan-panel";
 import { ReceiptDialog, type ExtractResult } from "@/components/receipt-dialog";
 
 export function DiningCar() {
-  const persisted = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
-  const hydrated = persisted !== null;
-  const state = persisted ?? EMPTY_STATE;
-  const setState = setPersisted;
+  const [state, setStateRaw] = useState<Persisted>(loadPersisted);
+  const setState = useCallback((updater: Persisted | ((prev: Persisted) => Persisted)) => {
+    setStateRaw((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      savePersisted(next);
+      return next;
+    });
+  }, []);
 
   const [today, setToday] = useState(() => todayISO());
   const [receiptOpen, setReceiptOpen] = useState(false);
@@ -163,13 +167,7 @@ export function DiningCar() {
         </div>
       )}
 
-      {!hydrated ? (
-        <div className="grid gap-4 md:grid-cols-3">
-          <div className="h-40 animate-pulse rounded-xl bg-card md:col-span-3" />
-          <div className="h-96 animate-pulse rounded-xl bg-card md:col-span-2" />
-          <div className="h-96 animate-pulse rounded-xl bg-card" />
-        </div>
-      ) : state.items.length === 0 ? (
+      {state.items.length === 0 ? (
         <section className="flex flex-1 flex-col items-center justify-center gap-6 rounded-2xl border border-dashed px-6 py-16 text-center">
           <div className="text-6xl" aria-hidden>
             🧾 → 📅 → 🍽️
