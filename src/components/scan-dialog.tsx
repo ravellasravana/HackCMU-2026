@@ -33,6 +33,39 @@ function readAsDataURL(file: File): Promise<string> {
   });
 }
 
+const MAX_DIMENSION = 1280;
+
+/**
+ * A real phone camera photo is routinely 3-10MB at full resolution — fine on a laptop's
+ * dev server, but slow (or outright rejected by some hosts' body-size limits) over a phone's
+ * cellular or venue WiFi. Downscale to a long edge of 1280px and re-encode as JPEG before
+ * it ever leaves the device; Gemini needs enough resolution to read condition and text, not
+ * the original megapixel count. Falls back to the raw file if canvas encoding fails for any
+ * reason, so a device without canvas support still gets a working (just slower) upload.
+ */
+async function resizeForUpload(file: File): Promise<string> {
+  try {
+    const original = await readAsDataURL(file);
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error("Couldn't decode that image."));
+      el.src = original;
+    });
+    const scale = Math.min(1, MAX_DIMENSION / Math.max(img.width, img.height));
+    if (scale >= 1) return original; // already small enough
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(img.width * scale);
+    canvas.height = Math.round(img.height * scale);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return original;
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.85);
+  } catch {
+    return readAsDataURL(file);
+  }
+}
+
 /**
  * Camera-scan a fridge/counter/leftovers photo. Deliberately built on a plain file input with
  * capture="environment" rather than a live getUserMedia preview: the latter needs HTTPS or
@@ -51,7 +84,7 @@ export function ScanDialog({ open, onOpenChange, onAdd }: Props) {
     setBusy(true);
     setError(null);
     try {
-      const dataUrl = await readAsDataURL(file);
+      const dataUrl = await resizeForUpload(file);
       const res = await fetch("/api/scan", {
         method: "POST",
         headers: { "content-type": "application/json" },
