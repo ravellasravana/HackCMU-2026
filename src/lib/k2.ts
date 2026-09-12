@@ -1,4 +1,5 @@
 import "server-only";
+import { parseModelJson } from "./jsonRepair";
 
 /**
  * Minimal OpenAI-compatible chat client for Kimi K2.
@@ -38,6 +39,5 @@ export async function k2Json<T>(prompt: string, { maxTokens = 2500 }: { maxToken
   }
   const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
   const content = data.choices?.[0]?.message?.content ?? "";
-  const cleaned = content.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
-  return JSON.parse(cleaned) as T;
+  return parseModelJson<T>(content);
 }

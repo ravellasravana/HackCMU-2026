@@ -78,7 +78,7 @@ export async function POST(request: Request) {
 
   try {
     for (let attempt = 0; attempt < 2 && accepted.length < 3; attempt++) {
-      const { data: out, provider } = await llmJson<K2Dinners>(dinnersPrompt(promptItems, feedback, diet));
+      const { data: out, provider } = await llmJson<K2Dinners>(dinnersPrompt(promptItems, feedback, diet), { maxTokens: 8000 });
       usedProvider = provider;
       const reasons: string[] = [];
       (out.dinners ?? []).forEach((d, i) => {

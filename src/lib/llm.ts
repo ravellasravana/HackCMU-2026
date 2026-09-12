@@ -1,5 +1,6 @@
 import "server-only";
 import { k2Configured, k2Json } from "./k2";
+import { parseModelJson } from "./jsonRepair";
 
 export type LlmProvider = "k2" | "gemini";
 
@@ -56,8 +57,7 @@ async function geminiJson<T>(prompt: string, { maxTokens = 2500 }: { maxTokens?:
   }
   const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
   const content = data.choices?.[0]?.message?.content ?? "";
-  const cleaned = content.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
-  return JSON.parse(cleaned) as T;
+  return parseModelJson<T>(content);
 }
 
 /** Routes to whichever provider is configured; callers get back which one actually ran. */
