@@ -57,7 +57,12 @@ export async function POST(request: Request) {
     return Response.json({ error: "Body must be JSON with `items` and `today`." }, { status: 400 });
   }
   if (!llmConfigured()) {
-    return Response.json({ recipes: [], rejected: [], source: "local", note: "No LLM configured — using the built-in recipe library." });
+    return Response.json({
+      recipes: [],
+      rejected: [],
+      source: "local",
+      note: "Tonight's plan is already picked from the recipe library. Add a Gemini or IFM K2 key to unlock fresh AI-generated dinners too.",
+    });
   }
   if (!items.length || !today) return Response.json({ error: "Nothing in the kitchen yet." }, { status: 400 });
 

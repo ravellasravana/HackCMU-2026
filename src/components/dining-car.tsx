@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  CalendarPlus, Leaf, Mail, RotateCcw, Sparkles, Loader2, TrainFront,
+  CalendarPlus, Leaf, Mail, RotateCcw, Sparkles, Loader2,
   TrendingDown, Zap, ChevronRight,
 } from "lucide-react";
 import { addDays, todayISO } from "@/lib/dates";
@@ -239,7 +239,7 @@ export function DiningCar() {
           kind: "info",
         });
       } else {
-        setNotice({ text: data.note ?? "The LLM returned nothing usable — using the built-in recipe library.", kind: "warn" });
+        setNotice({ text: data.note ?? "Couldn't find a new AI dinner that fits your kitchen — tonight's plan is still from the recipe library.", kind: "warn" });
       }
     } catch (err) {
       setNotice({ text: (err as Error).message, kind: "warn" });
@@ -267,9 +267,6 @@ export function DiningCar() {
       <header className="sticky top-0 z-30 border-b border-white/8 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 md:px-8">
           <div className="flex items-center gap-2.5">
-            <div className="flex size-8 items-center justify-center rounded-lg bg-primary/15">
-              <TrainFront className="size-4 text-primary" />
-            </div>
             <div>
               <div className="text-sm font-bold leading-none tracking-tight">Dining Car</div>
               <div className="text-[10px] text-muted-foreground">IFM K2 · USDA FoodKeeper · HackCMU 2026</div>
@@ -299,10 +296,10 @@ export function DiningCar() {
                   variant="outline"
                   onClick={askK2}
                   disabled={k2Busy}
-                  title="Ask IFM K2 for personalized dinners — verified against your inventory"
+                  title="Ask AI for fresh dinner ideas — every one verified against your inventory"
                 >
                   {k2Busy ? <Loader2 className="animate-spin" /> : <Sparkles />}
-                  {k2Busy ? "Thinking…" : "K2 dinners"}
+                  {k2Busy ? "Thinking…" : "AI dinners"}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={reset} aria-label="Clear everything">
                   <RotateCcw />
