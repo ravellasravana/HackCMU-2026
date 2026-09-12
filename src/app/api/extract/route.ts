@@ -41,7 +41,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const k2 = await k2Json<K2Extraction>(extractionPrompt(text), { maxTokens: 3000 });
+    const k2 = await k2Json<K2Extraction>(extractionPrompt(text), { maxTokens: 6000 });
     const lines: ExtractedLine[] = [];
     for (const item of k2.items ?? []) {
       let foodId = item.canonical && FOOD_BY_ID[item.canonical] ? item.canonical : null;
