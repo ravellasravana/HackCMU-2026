@@ -26,7 +26,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#231d15",
+  themeColor: "#1c1c1f",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -37,6 +37,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       style={{ "--font-sans": "var(--font-geist-sans)" } as React.CSSProperties}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
+        <div className="cmu-tartan-strip" aria-hidden />
         <RegisterServiceWorker />
         {children}
       </body>
