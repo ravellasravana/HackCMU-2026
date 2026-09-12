@@ -30,7 +30,7 @@ async function geminiJson<T>(prompt: string, { maxTokens = 2500 }: { maxTokens?:
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY is not set");
   const baseUrl = (process.env.GEMINI_BASE_URL ?? "https://generativelanguage.googleapis.com/v1beta/openai").replace(/\/$/, "");
-  const model = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
+  const model = process.env.GEMINI_MODEL ?? "gemini-3.6-flash";
 
   const res = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
