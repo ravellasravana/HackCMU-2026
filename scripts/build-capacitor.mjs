@@ -18,16 +18,28 @@
 // directory handle in a way that makes *renaming* an existing, still-present
 // directory intermittently fail with EPERM, but deleting/recreating leaf
 // folders is unaffected.
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
 const root = path.resolve(fileURLToPath(import.meta.url), "..", "..");
-const routeDirs = [
-  path.join(root, "src", "app", "api", "extract"),
-  path.join(root, "src", "app", "api", "dinners"),
-];
+
+// Discovered rather than hardcoded, so a newly added API route (e.g. the
+// /api/scan and /api/speak routes added after this script was first written)
+// doesn't silently break the static export the next time someone forgets to
+// list it here.
+function findRouteDirs(dir) {
+  const found = [];
+  if (!existsSync(dir)) return found;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isFile() && entry.name === "route.ts") found.push(dir);
+    else if (entry.isDirectory()) found.push(...findRouteDirs(full));
+  }
+  return found;
+}
+const routeDirs = findRouteDirs(path.join(root, "src", "app", "api"));
 
 const originals = new Map();
 for (const dir of routeDirs) {

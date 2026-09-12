@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  CalendarPlus, CalendarCheck2, Mail, RotateCcw, Sparkles, Loader2, TrainFront,
-  CalendarPlus, Camera, Leaf, Mail, RotateCcw, Sparkles, Loader2,
+  CalendarPlus, CalendarCheck2, Camera, Leaf, Mail, RotateCcw, Sparkles, Loader2,
   TrendingDown, Zap, ChevronRight,
 } from "lucide-react";
 import { addDays, todayISO } from "@/lib/dates";
@@ -177,7 +176,6 @@ export function DiningCar() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const recipes = useMemo(() => [...state.k2Recipes, ...RECIPES], [state.k2Recipes]);
   const recipes = useMemo(
     () => filterRecipesByDiet([...state.k2Recipes, ...RECIPES], state.diet),
     [state.k2Recipes, state.diet],
