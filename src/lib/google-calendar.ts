@@ -246,13 +246,6 @@ export interface SyncResult {
   created: number;
   updated: number;
   failed: number;
-  /** The first failure's actual response body, so the UI can surface Google's real error instead of a bare status code. */
-  firstError?: string;
-}
-
-async function bodyOrStatus(res: Response): Promise<string> {
-  const text = await res.text().catch(() => "");
-  return text ? `HTTP ${res.status}: ${text.slice(0, 300)}` : `HTTP ${res.status}`;
 }
 
 /**
@@ -281,7 +274,7 @@ export async function syncToGoogleCalendar(items: DatedItem[], plan: Plan): Prom
           // The user deleted it on their end — recreate it.
           delete map[uid];
         } else if (!res.ok) {
-          throw new Error(await bodyOrStatus(res));
+          throw new Error(`HTTP ${res.status}`);
         } else {
           result.updated++;
           continue;
@@ -292,13 +285,12 @@ export async function syncToGoogleCalendar(items: DatedItem[], plan: Plan): Prom
         headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
         body: JSON.stringify(resource),
       });
-      if (!res.ok) throw new Error(await bodyOrStatus(res));
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const created = (await res.json()) as { id: string };
       map[uid] = created.id;
       result.created++;
-    } catch (err) {
+    } catch {
       result.failed++;
-      if (!result.firstError) result.firstError = (err as Error).message;
     }
   }
 

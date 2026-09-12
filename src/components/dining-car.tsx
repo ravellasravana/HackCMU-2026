@@ -232,9 +232,8 @@ export function DiningCar() {
     setGoogleBusy(true);
     try {
       const result = await googleCalendar.syncToGoogleCalendar(dated, plan);
-      const failedNote = result.failed ? `, ${result.failed} failed${result.firstError ? ` (${result.firstError})` : ""}` : "";
       setNotice({
-        text: `Synced to Google Calendar: ${result.created} added, ${result.updated} updated${failedNote}.`,
+        text: `Synced to Google Calendar: ${result.created} added, ${result.updated} updated${result.failed ? `, ${result.failed} failed` : ""}.`,
         kind: result.failed ? "warn" : "info",
       });
     } catch (err) {
