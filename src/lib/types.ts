@@ -49,7 +49,13 @@ export interface InventoryItem {
   /** User tapped confirm (or the match was confident enough not to ask). */
   confirmed: boolean;
   staple: boolean;
-  source: "receipt" | "manual";
+  source: "receipt" | "manual" | "photo";
+  /**
+   * ISO date. Set only by a camera scan, where Gemini reads condition directly from the
+   * photo instead of assuming a fixed shelf life from purchase date. Takes priority over
+   * the normal purchaseDate + shelf-life computation when present.
+   */
+  eatByOverride?: string;
 }
 
 export interface RecipeIngredient {
@@ -72,7 +78,7 @@ export interface Recipe {
   steps: string[];
   /** Lower = what people tend to cook first when they have no plan. */
   popularity: number;
-  source: "library" | "k2";
+  source: "library" | "k2" | "gemini";
 }
 
 export interface ExtractedLine {
@@ -84,4 +90,20 @@ export interface ExtractedLine {
   price: number;
   confidence: number;
   category?: Category;
+}
+
+export interface DietPrefs {
+  vegetarian: boolean;
+  /** Free-typed keywords, e.g. "peanuts", "shellfish". Matched against food names/aliases. */
+  allergies: string[];
+}
+
+/** One food/dish identified from a camera-scanned photo, shelf life judged visually. */
+export interface ScannedItem {
+  name: string;
+  foodId: string | null;
+  category: Category;
+  condition: string;
+  daysLeft: number;
+  confidence: number;
 }

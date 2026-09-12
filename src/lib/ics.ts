@@ -22,7 +22,7 @@ function fold(line: string): string {
 
 /**
  * Build a calendar file: one all-day "eat by" alarm per perishable and one
- * "Tonight: …" event per planned dinner. Mirrors what the n8n workflow writes to Google Calendar.
+ * "Tonight: …" event per planned dinner.
  */
 export function buildCalendar(items: DatedItem[], plan: Plan, today: string): string {
   const stamp = icsDate(today) + "T000000Z";

@@ -1,5 +1,5 @@
 import { FOOD_BY_ID } from "@/lib/foodkeeper";
-import { k2Configured, k2Json } from "@/lib/k2";
+import { llmConfigured, llmJson } from "@/lib/llm";
 import { matchFood, parseReceipt } from "@/lib/normalize";
 import { extractionPrompt } from "@/lib/prompts";
 import type { Category, ExtractedLine } from "@/lib/types";
@@ -21,8 +21,9 @@ interface K2Extraction {
 
 /**
  * POST { text } → { lines, meta, source }
- * Uses Kimi K2 when K2_API_KEY is set; otherwise the deterministic local normalizer.
- * K2 output is validated against the FoodKeeper table so a bad canonical id can't leak through.
+ * Uses IFM K2 or Gemini, whichever is configured (see lib/llm.ts); otherwise the
+ * deterministic local normalizer. Model output is validated against the FoodKeeper
+ * table so a bad canonical id can't leak through.
  */
 export async function POST(request: Request) {
   let text = "";
@@ -36,12 +37,12 @@ export async function POST(request: Request) {
 
   const local = parseReceipt(text);
 
-  if (!k2Configured()) {
+  if (!llmConfigured()) {
     return Response.json({ ...local, source: "local" });
   }
 
   try {
-    const k2 = await k2Json<K2Extraction>(extractionPrompt(text), { maxTokens: 6000 });
+    const { data: k2, provider } = await llmJson<K2Extraction>(extractionPrompt(text), { maxTokens: 6000 });
     const lines: ExtractedLine[] = [];
     for (const item of k2.items ?? []) {
       let foodId = item.canonical && FOOD_BY_ID[item.canonical] ? item.canonical : null;
@@ -64,20 +65,20 @@ export async function POST(request: Request) {
         category: item.category,
       });
     }
-    if (!lines.length) throw new Error("K2 returned no items");
+    if (!lines.length) throw new Error(`${provider} returned no items`);
     return Response.json({
       lines,
       meta: {
         retailer: k2.retailer ?? local.meta.retailer,
         purchaseDate: k2.purchase_date ?? local.meta.purchaseDate,
       },
-      source: "k2",
+      source: provider,
     });
   } catch (err) {
     return Response.json({
       ...local,
       source: "local",
-      warning: `K2 extraction failed, fell back to the local normalizer: ${(err as Error).message}`,
+      warning: `LLM extraction failed, fell back to the local normalizer: ${(err as Error).message}`,
     });
   }
 }
