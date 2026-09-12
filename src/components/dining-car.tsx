@@ -275,9 +275,6 @@ export function DiningCar() {
       <header className="sticky top-0 z-30 border-b border-white/8 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 md:px-8">
           <div className="flex items-center gap-2.5">
-            <div className="flex size-8 items-center justify-center rounded-lg bg-primary/15 text-lg" aria-hidden>
-              🐕
-            </div>
             <div className="text-sm font-bold leading-none tracking-tight">Dining Car</div>
           </div>
 
